@@ -1,0 +1,71 @@
+version: 2
+
+sources:
+  - name: application_db
+    catalog: AwsDataCatalog
+   
+    schema: prod-raw
+    tables:
+      - name: raw_session
+        description: Raw session data from production
+
+      - name: raw_scenario
+        description: Scenario data from production
+
+      - name: raw_users
+        description: Raw user data from production
+      
+      - name: raw_session_learner
+        description: Session learner mapping data from production
+
+      - name: raw_client_user_role
+        description: Client user role mapping data from production
+
+      - name: raw_scenario_building_block
+        description: Scenario building block data from production
+
+      - name: raw_events_mindset
+        description: Events mindset data from production
+
+      - name: raw_project
+        description: Raw project data from production
+
+      - name: raw_ondemand_session
+        description: On-demand session data from production
+
+      - name: raw_scenario_team
+        description: Scenario team mapping data from production
+
+      - name: raw_ondemand_session_event
+        description: On-demand session event data from production
+
+      - name: raw_building_blocks
+        description: Building blocks data from production
+
+      - name: raw_team
+        description: Team data from 
+        
+      - name: raw_client
+        description: Client data from production
+      
+      - name: raw_client_user
+        description: Client user data from production
+      
+      - name: raw_industry
+        description: Industry data from production
+
+      - name: raw_skill_score
+        description: Skill score data from production
+
+      - name: raw_session_score
+        description: Session score data from production
+      
+      - name: raw_team_member
+        description: Team member data from production
+      
+      - name: raw_sim_feedback
+        description: Sim feedback data from production
+
+      - name: raw_scenario_bank_event_scoring
+        description: scenario bank event data 
+      
