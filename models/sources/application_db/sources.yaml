@@ -69,3 +69,5 @@ sources:
       - name: raw_scenario_bank_event_scoring
         description: scenario bank event data 
       
+      - name: raw_scenario_goals
+        description: scenario goals data from production
