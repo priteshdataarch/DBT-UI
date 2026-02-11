@@ -14,7 +14,7 @@ with base as (
 select 
     *,
    
-    row_number() over (partition by id) as row_number
+    row_number() over (partition by id order by op desc) as row_number
 
 from {{ source('application_db', 'raw_client_user') }}
 )
@@ -25,4 +25,4 @@ select
     client_id, 
     archived 
 from base
-where row_number = 1
+where row_number = 1 and archived = false

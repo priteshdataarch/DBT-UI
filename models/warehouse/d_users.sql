@@ -22,4 +22,4 @@ from {{ source('application_db', 'raw_users') }}
 
 select *
 from base
-where row_number = 1
+where row_number = 1 and archived = false
