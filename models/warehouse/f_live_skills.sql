@@ -163,8 +163,10 @@ unpivoted.score,
 unpivoted.strengthAssessmentId, 
 unpivoted.opportunitiesAssessmentId, 
 event_number, 
-skill_id, 
-skill_name, 
+unpivoted.skill_id as skill_id, 
+unpivoted.skill_name as old_skill_name,
+bb.title as skill_name,
+dm.domain_id, 
 unpivoted.mindset_id,
 msm.type as mindset_type
 from unpivoted 
@@ -172,3 +174,8 @@ left join
     {{ ref('m_skill_score_mindset')}} msm
 on 
     unpivoted.mindset_id = msm.mindset_id
+LEFT JOIN 
+        {{ ref('f_skill_domain_mapping') }} AS dm ON unpivoted.skill_id = dm.skill_id
+    LEFT JOIN 
+        {{ ref('f_building_blocks') }} AS bb ON dm.domain_id = bb.id
+        

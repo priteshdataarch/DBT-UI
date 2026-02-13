@@ -71,3 +71,6 @@ sources:
       
       - name: raw_scenario_goals
         description: scenario goals data from production
+
+      - name: raw_skill_domain_mapping
+        description: skill domain mapping data from production
