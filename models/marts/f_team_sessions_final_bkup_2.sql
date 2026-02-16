@@ -9,7 +9,9 @@
     meta = {
         "owner": "analytics",
         "pii": false
-    }
+    },
+
+    enabled = false
 ) }}
 
 with team as (

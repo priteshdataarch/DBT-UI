@@ -15,11 +15,11 @@ with base as (
 select 
     *
    
-    , row_number() over (partition by scenario_id, team_id order by op asc) as row_number
+    , row_number() over (partition by scenario_id, team_id order by op desc) as row_number
      --date(start_date) as session_date
 from {{ source('application_db', 'raw_scenario_team') }}
 )
 
 select *
 from base
-where row_number = 1 and op <> 'D'
+where row_number = 1
