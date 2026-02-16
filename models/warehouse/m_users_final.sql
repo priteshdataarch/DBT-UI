@@ -40,7 +40,7 @@ select
     
     
     --st.scenario_id,
-    scenario_team.team_id as scenario_team_id,
+    scenario_team.team_id as scenario_team_id
     
     --s.name as scenario_name
 from 
