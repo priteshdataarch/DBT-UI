@@ -135,10 +135,11 @@ left join
 left join
     {{ ref('d_secenario') }} scenario on aus.scenario_id = scenario.id
 left join 
-    {{ ref('d_client') }} scenario_client on scenario.client_id = scenario_client.id and scenario_client.licensee_id = 'mursion'
+    {{ ref('d_client') }} scenario_client on scenario.client_id = scenario_client.id  
 left join 
     {{ ref('d_project') }} project on scenario.project_id = project.id
 left join
     {{ ref('f_sessions_final') }} sessions 
     on sessions.learner_id = aus.user_id  
     and sessions.scenario_id = aus.scenario_id
+where scenario_client.licensee_id = 'mursion'

@@ -21,4 +21,4 @@ from {{ source('application_db', 'raw_client') }}
 
 select *
 from base
-where row_number = 1 and licensee_id = 'mursion'
+where row_number = 1
