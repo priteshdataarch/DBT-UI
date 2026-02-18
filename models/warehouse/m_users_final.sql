@@ -8,7 +8,8 @@
     meta = {
         "owner": "analytics",
         "pii": false
-    }
+    },
+    enable=false
 ) }}
 
 
