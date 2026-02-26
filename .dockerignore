@@ -1,0 +1,10 @@
+.git
+.gitignore
+.github
+.vscode
+.cursor
+target/
+dbt_packages/
+logs/
+*.md
+.user.yml
