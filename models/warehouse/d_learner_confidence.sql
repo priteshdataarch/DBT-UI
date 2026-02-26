@@ -10,15 +10,16 @@
 ) }}
 
 
+
 with base as (
 select 
     *,
    
-    row_number() over (partition by id order by modify_revision desc) as row_number
+    row_number() over (partition by _id order by op desc) as row_number
 
-from {{ source('application_db', 'raw_client') }}
+from {{ source('application_db', 'raw_session_learner_report') }}
 )
 
 select *
 from base
-where row_number = 1 and archived = false
+where row_number = 1

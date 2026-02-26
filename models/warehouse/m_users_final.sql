@@ -9,7 +9,7 @@
         "owner": "analytics",
         "pii": false
     },
-    enable=false
+    enabled=false
 ) }}
 
 
@@ -63,4 +63,5 @@ left join
 left join
     {{ ref('d_project') }} project on scenario.project_id = project.id
 group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14
+
 )

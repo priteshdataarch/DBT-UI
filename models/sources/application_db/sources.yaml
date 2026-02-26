@@ -74,3 +74,9 @@ sources:
 
       - name: raw_skill_domain_mapping
         description: skill domain mapping data from production
+
+      - name: raw_post_simulation
+        description: post simulation data from production
+
+      - name: raw_session_learner_report
+        description: session learner report data from production

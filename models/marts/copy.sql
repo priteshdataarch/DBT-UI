@@ -56,46 +56,14 @@ current_user_team_scenarios as (
     left join
         {{ ref('m_scenario_team') }} scenario_team on ut.team_id = scenario_team.team_id
 ),
-historical_user_teams as (
-    with base as (
-     select 
-        st.scenario_id , st.team_id, role.user_id , row_number() over( partition by st.scenario_id, role.user_id ) as rnk 
-     from 
-        "prod-raw".raw_scenario_team st 
-     join 
-        "prod-raw".raw_team_member tm 
-     on 
-        tm.team_id = st.team_id 
-     join 
-        {{ ref('m_client_user_role') }} role 
-     on 
-        role.id = tm.user_role_id 
-    
-    ) 
-    select b.*, team.name as team_name from 
-    base b
-    left join
-        {{ ref('d_team') }} team
-    on 
-        b.team_id = team.id
-    
-    where rnk =1 
 
-),
 -- CTE 4: Historical user-scenario pairs from sessions
 historical_user_scenarios as (
     select distinct
         sessions.learner_id as user_id,
-        sessions.scenario_id,
-        hus.team_id,
-        hus.team_name
+        sessions.scenario_id
     from 
         {{ ref('f_sessions_final') }} sessions
-    left join
-        historical_user_teams hus
-    on 
-        sessions.learner_id = hus.user_id
-        and sessions.scenario_id = hus.scenario_id
     where 
         sessions.learner_id is not null
         and sessions.scenario_id is not null
@@ -117,8 +85,8 @@ all_user_team_scenarios as (
     -- Historical scenarios missing in current mapping
     select distinct
         hus.user_id,
-        hus.team_id,
-        hus.team_name,
+        null as team_id,
+        null as team_name,
         hus.scenario_id
     from 
         historical_user_scenarios hus
@@ -139,6 +107,7 @@ select
     coalesce(scenario_client.archived, ucr.client_archived) as client_archived, 
     coalesce(scenario_client.operated_by, ucr.client_operated_by) as client_operated_by,
     ucr.user_role,
+    ucr.client_user_role_id,
     aus.team_id, 
     aus.team_name,
     aus.scenario_id,
@@ -175,8 +144,9 @@ left join
     {{ ref('f_sessions_final') }} sessions 
     on sessions.learner_id = aus.user_id  
     and sessions.scenario_id = aus.scenario_id
-    --where scenario_client.licensee_id = 'mursion'
+where scenario_client.licensee_id = 'mursion'
 )
+
 select *
 from base
 
@@ -190,6 +160,7 @@ select
     client_archived,
     client_operated_by,
     user_role,
+    client_user_role_id,
     team_id,
     team_name,
     scenario_id,
@@ -223,6 +194,7 @@ select
     client_archived,
     client_operated_by,
     user_role,
+    client_user_role_id,
     team_id,
     team_name,
     scenario_id,
