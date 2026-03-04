@@ -1,0 +1,15 @@
+mersion_dbt_athena:
+  outputs:
+    dev:
+      database: awsdatacatalog
+      region_name: us-west-2
+      s3_data_dir: s3://mersion-dbt-athena/data_dir/
+      s3_staging_dir: s3://mersion-dbt-athena/staging_dir/
+      schema: dbt
+      threads: 4
+      type: athena
+      aws_access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
+      aws_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+      aws_default_region: "us-west-2"
+
+  target: dev

@@ -209,4 +209,4 @@ __marimo__/
 # dbt
 dbt_packages/
 logs/
-profiles.yml
+#profiles.yml
