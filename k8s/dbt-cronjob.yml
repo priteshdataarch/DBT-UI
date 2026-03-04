@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dbt-run
+  namespace: default          # change to your target namespace
+spec:
+  schedule: "0 14 * * *"      # 09:00 AM EST / 06:00 AM PST (14:00 UTC) — adjust as needed
+  timeZone: "America/New_York" # requires k8s >= 1.27; remove if on older cluster
+  concurrencyPolicy: Forbid    # skip run if previous one is still going
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1          # retry once on failure
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ecr-pull-secret   # created in Step 4 of DEVOPS_SETUP.md
+          containers:
+            - name: dbt
+              image: <AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/mersion-dbt-athena:latest
+              imagePullPolicy: Always
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: dbt-aws-credentials   # created in Step 3 of DEVOPS_SETUP.md
+                      key: aws_access_key_id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: dbt-aws-credentials
+                      key: aws_secret_access_key
+                - name: AWS_DEFAULT_REGION
+                  value: "us-west-2"
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1"
+                  memory: "1Gi"
