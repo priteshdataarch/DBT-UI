@@ -7,7 +7,8 @@
     meta = {
         "owner": "analytics",
         "pii": false
-    }
+    },
+    enabled = false
 ) }}
 
 -- 1️⃣ Deduplicate: keep latest survey per session
