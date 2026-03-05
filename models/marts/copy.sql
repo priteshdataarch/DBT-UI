@@ -6,7 +6,8 @@
     meta = {
         "owner": "analytics",
         "pii": false
-    }
+    },
+    enabled = false
 ) }}
 
 -- CTE 1: Base user-client-role relationship
