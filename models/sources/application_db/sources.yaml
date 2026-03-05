@@ -80,3 +80,9 @@ sources:
 
       - name: raw_session_learner_report
         description: session learner report data from production
+      
+      - name: raw_events
+        description: events data from production
+
+      - name: raw_events_assessment
+        description: events assessment data from production

@@ -30,3 +30,4 @@ select
     version 
 from base bb
 where row_number = 1
+and archived = false
