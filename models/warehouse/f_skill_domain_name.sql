@@ -6,7 +6,8 @@
     meta = {
         "owner": "analytics",
         "pii": false
-    }
+    },
+     enabled = false
     ) }}
 
     -- this has issue with cdc capture from the source

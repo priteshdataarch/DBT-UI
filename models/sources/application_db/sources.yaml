@@ -86,3 +86,6 @@ sources:
 
       - name: raw_events_assessment
         description: events assessment data from production
+
+      - name: raw_session_insights_service
+        description: session insights service data from production
