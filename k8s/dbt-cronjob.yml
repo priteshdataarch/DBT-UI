@@ -19,7 +19,7 @@ spec:
             - name: ecr-pull-secret   # created in Step 4 of DEVOPS_SETUP.md
           containers:
             - name: dbt
-              image: <AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/mersion-dbt-athena:latest
+              image: <AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/mursion-dbt-athena:latest
               imagePullPolicy: Always
               env:
                 - name: AWS_ACCESS_KEY_ID
@@ -34,6 +34,7 @@ spec:
                       key: aws_secret_access_key
                 - name: AWS_DEFAULT_REGION
                   value: "us-west-2"
+              command: ["sh", "-c", "dbt seed && dbt run"]
               resources:
                 requests:
                   cpu: "250m"

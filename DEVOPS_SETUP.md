@@ -34,12 +34,12 @@ Kubernetes CronJob (daily 9 AM EST)
 
 ```bash
 aws ecr create-repository \
-  --repository-name mersion-dbt-athena \
+  --repository-name mursion-dbt-athena \
   --region us-west-2
 ```
 
 Note the **registry URI** from the output — it looks like:
-`<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/mersion-dbt-athena`
+`<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/mursion-dbt-athena`
 
 ---
 
@@ -112,12 +112,12 @@ kubectl create secret docker-registry ecr-pull-secret \
 Edit `k8s/dbt-cronjob.yml` and replace the placeholder with your real account ID:
 
 ```
-image: <AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/mersion-dbt-athena:latest
+image: <AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/mursion-dbt-athena:latest
 ```
 
 Example:
 ```
-image: 123456789012.dkr.ecr.us-west-2.amazonaws.com/mersion-dbt-athena:latest
+image: 123456789012.dkr.ecr.us-west-2.amazonaws.com/mursion-dbt-athena:latest
 ```
 
 ---

@@ -21,5 +21,9 @@ RUN mkdir -p /root/.aws && chmod 700 /root/.aws
 # Install dbt packages only if a packages.yml exists.
 RUN if [ -f packages.yml ]; then dbt deps; fi
 
-# Run seeds and models when container starts.
-CMD ["sh", "-c", "dbt seed && dbt run"]
+# No default CMD — pass the dbt command explicitly at runtime.
+# Examples:
+#   docker run ... dbt run
+#   docker run ... dbt run --select my_model
+#   docker run ... sh -c "dbt seed && dbt run"
+CMD ["dbt", "--help"]
