@@ -79,7 +79,7 @@ unpivoted as (
         TRIM(REGEXP_REPLACE(event1skillname, '</?p[^>]*>', '')) as skill_name,
         selectedevent1mindsetid as mindset_id
     from parsed
-    where event1skillid is not null
+    where event1skillid is not null and trim(event1skillid) <> ''
 
     union all
 
@@ -97,7 +97,7 @@ unpivoted as (
         TRIM(REGEXP_REPLACE(event2skillname, '</?p[^>]*>', '')) as skill_name,
         selectedevent2mindsetid as mindset_id
     from parsed
-    where event2skillid is not null
+    where event2skillid is not null and trim(event2skillid) <> ''
 
     union all
 
@@ -115,7 +115,7 @@ unpivoted as (
         TRIM(REGEXP_REPLACE(event3skillname, '</?p[^>]*>', '')) as skill_name,
         selectedevent3mindsetid as mindset_id
     from parsed
-    where event3skillid is not null
+    where event3skillid is not null and trim(event3skillid) <> ''
 
     union all
 
@@ -133,7 +133,7 @@ unpivoted as (
         TRIM(REGEXP_REPLACE(event4skillname, '</?p[^>]*>', '')) as skill_name,
         selectedevent4mindsetid as mindset_id
     from parsed
-    where event4skillid is not null
+    where event4skillid is not null and trim(event4skillid) <> ''
 
     union all
 
@@ -151,7 +151,7 @@ unpivoted as (
         TRIM(REGEXP_REPLACE(event5skillname, '</?p[^>]*>', '')) as skill_name,
         selectedevent5mindsetid as mindset_id
     from parsed
-    where event5skillid is not null
+    where event5skillid is not null and trim(event5skillid) <> ''
 )
 
 select unpivoted.mursionSessionId,
@@ -170,7 +170,28 @@ bb.building_block_type,
 bb.level,
 dm.domain_id, 
 unpivoted.mindset_id,
-msm.type as mindset_type
+--msm.type as mindset_type,
+bb1.title as mindset_score,
+bb1.type as mindset_type, 
+CASE
+    WHEN bb1.title IS NULL
+        THEN 1 --'1 - Novice'
+    WHEN bb1.title NOT IN ('Strong', 'Competent', 'Emerging', 'Novice')
+         AND bb1.type = 'Positive'
+        THEN 3 --'3 - Competent'
+    WHEN bb1.title NOT IN ('Strong', 'Competent', 'Emerging', 'Novice')
+         AND bb1.type = 'Derailing'
+        THEN 1 --'1 - Novice'
+    WHEN bb1.title = 'Strong'
+        THEN 4 --'4 - Strong'
+    WHEN bb1.title = 'Competent'
+        THEN 3 --'3 - Competent'
+    WHEN bb1.title = 'Emerging'
+        THEN 2 --'2 - Emerging'
+    WHEN bb1.title = 'Novice'
+        THEN 1 --'1 - Novice'
+    ELSE 0 --bb1.title
+END as skill_score 
 from unpivoted 
 left join 
     {{ ref('m_skill_score_mindset')}} msm
@@ -180,4 +201,7 @@ LEFT JOIN
         {{ ref('f_skill_domain_mapping') }} AS dm ON unpivoted.skill_id = dm.skill_id
 LEFT JOIN 
         {{ ref('f_building_blocks') }} AS bb ON dm.domain_id = bb.id
-        
+left join 
+        {{ ref('f_events_mindset') }} AS em ON em.id = unpivoted.mindset_id
+left join 
+        {{ ref('f_building_blocks') }} AS bb1 ON em.mindset_id = bb1.id

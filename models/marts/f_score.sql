@@ -37,22 +37,22 @@ select
         sf.final_session_sub_status,
         sf.session_date,
         sf.session_type,
-        os.skill,
-        os.skill_score,
-        os.SessionScore,
-        ls.webportal,
-        ls.finished,
-        ls.recordeddate,
-        ls.generationType,
-        ls.score,
-        ls.event_number,
-        ls.skill_id,
-        ls.skill_name,
-        ls.building_block_type,
-        ls.level,
-        ls.domain_id,
-        ls.mindset_id,
-        ls.mindset_type
+        coalesce(os.skill, ls.skill_name) as skill,
+        coalesce(os.skill_score, ls.skill_score) as skill_score,
+        coalesce(os.SessionScore, ls.score) as SessionScore
+        --ls.webportal,
+        --ls.finished,
+        --ls.recordeddate,
+       -- ls.generationType,
+        --ls.score,
+        --ls.event_number,
+       -- ls.skill_id,
+        --ls.skill_name,
+        --ls.building_block_type,
+        --ls.level,
+        --ls.domain_id,
+        --ls.mindset_id,
+        --ls.mindset_type
         
 from 
     {{ ref('f_team_sessions_final')}} sf
