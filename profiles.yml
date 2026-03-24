@@ -8,9 +8,9 @@ mursion_dbt_athena:
       schema: dbt
       threads: 4
       type: athena
-      #aws_profile_name: mursion_dbt_athena
-      aws_access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
-      aws_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
-      aws_default_region: "us-west-2"
+      aws_profile_name: mursion_dbt_athena
+      # aws_access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
+      # aws_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+      # aws_default_region: "us-west-2"
 
   target: dev

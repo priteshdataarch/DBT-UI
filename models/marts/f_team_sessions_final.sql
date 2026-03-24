@@ -159,7 +159,9 @@ select
     sessions.late_canceled, 
     sessions.final_session_sub_status, 
     sessions.session_date, 
-    sessions.session_type
+    sessions.session_type,
+    scenario.generation_type as scenario_generation_type,
+    
       --  scenario.project_id as scenario_project_id,
       --  scenario.client_id as scenario_client_id
 from 

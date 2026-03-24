@@ -35,4 +35,4 @@ models:
       +table_type: iceberg
       +format: parquet
       +properties:
-        write.target-file-size-bytes: "52428800"
+        +write.target-file-size-bytes: "52428800"
