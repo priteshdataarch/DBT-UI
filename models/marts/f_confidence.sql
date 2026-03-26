@@ -20,20 +20,18 @@ ts.scenario_id,
 ts.project_name,
 ts.scenario_name,
 ts.session_id,
-lc."session_learner_report.sessionid" as session_learner_id,
+lc.session_id as confidence_session_id,
 ts.session_type,
 ts.status,
 ts.start_date,
-lc.
-"session_learner_report.presimulationconfidence.questionid" as preconfidencequestionid,
-lc."session_learner_report.presimulationconfidence.questiontext" as preconfidencequestion,
-lc."session_learner_report.presimulationconfidence.answertext" as preconfidenceanswer,
-lc."session_learner_report.presimulationconfidence.selectedanswernumber" as preconfidencescore,
-lc.
-"session_learner_report.postsimulationconfidence.questionid" as postconfidencequestionid,
-lc."session_learner_report.postsimulationconfidence.questiontext" as postconfidencequestion,
-lc."session_learner_report.postsimulationconfidence.answertext" as postconfidenceanswer,
-lc."session_learner_report.postsimulationconfidence.selectedanswernumber" as postconfidencescore,
+lc.pre_conf_question_id as preconfidencequestionid,
+lc.pre_conf_question_text as preconfidencequestion,
+lc.pre_conf_answer_text as preconfidenceanswer,
+lc.pre_conf_selected_answer_number as preconfidencescore,
+lc.post_conf_question_id as postconfidencequestionid,
+lc.post_conf_question_text as postconfidencequestion,
+lc.post_conf_answer_text as postconfidenceanswer,
+lc.post_conf_selected_answer_number as postconfidencescore,
 ROW_NUMBER() OVER (PARTITION BY ts.scenario_id,ts.client_user_role_id ORDER BY ts.start_date ASC) as Attempt
 from {{ ref('f_team_sessions_final') }} ts
-inner join {{ ref('d_learner_confidence') }} lc on ts.session_id=lc."session_learner_report.sessionid"
+inner join {{ ref('d_learner_confidence') }} lc on ts.session_id=lc.session_id

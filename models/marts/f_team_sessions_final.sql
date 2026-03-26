@@ -160,7 +160,7 @@ select
     sessions.final_session_sub_status, 
     sessions.session_date, 
     sessions.session_type,
-    scenario.generation_type as scenario_generation_type,
+    scenario.generation_type as scenario_generation_type
     
       --  scenario.project_id as scenario_project_id,
       --  scenario.client_id as scenario_client_id
@@ -169,7 +169,7 @@ from
 left join
     user_client_role ucr on aus.user_id = ucr.user_id
 left join
-    {{ ref('d_secenario') }} scenario on aus.scenario_id = scenario.id
+    {{ ref('d_scenario') }} scenario on aus.scenario_id = scenario.id
 left join 
     {{ ref('d_client') }} scenario_client on scenario.client_id = scenario_client.id  
 left join 
@@ -211,7 +211,8 @@ select
     late_canceled,
     final_session_sub_status,
     session_date,
-    session_type
+    session_type,
+    scenario_generation_type
 from base
 where base.client_id = '55d98b8a-a265-4be5-aa95-e32eeeb4e5d9'
 
@@ -245,6 +246,7 @@ select
     late_canceled,
     final_session_sub_status,
     session_date,
-    session_type
+    session_type,
+    scenario_generation_type
 from base
 where base.client_id = '55d98b8a-a265-4be5-aa95-e32eeeb4e5d9'

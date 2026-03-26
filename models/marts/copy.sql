@@ -136,7 +136,7 @@ from
 left join
     user_client_role ucr on aus.user_id = ucr.user_id
 left join
-    {{ ref('d_secenario') }} scenario on aus.scenario_id = scenario.id
+    {{ ref('d_scenario') }} scenario on aus.scenario_id = scenario.id
 left join 
     {{ ref('d_client') }} scenario_client on scenario.client_id = scenario_client.id  
 left join 

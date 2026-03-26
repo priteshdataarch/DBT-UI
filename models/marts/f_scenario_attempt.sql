@@ -27,6 +27,6 @@ ps.Q4_answerText as confidenceAnswer ,
 ps.Q4_selectedAnswerNumber as confidenceScore
 from {{ ref('f_team_sessions_final') }} ts
 inner join {{ ref('d_post_simulation') }} ps on ts.session_id=ps.mursionsessionid and ts.user_id=ps.userid
-left join {{ ref('d_secenario') }} sc on ts.scenario_id=sc.id
+left join {{ ref('d_scenario') }} sc on ts.scenario_id=sc.id
 where ts.status='COMPLETED' and sc.licensee_id='mursion' 
 order by 1,2,3,4,6,ts.start_date asc

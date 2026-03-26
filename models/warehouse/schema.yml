@@ -72,7 +72,7 @@ models:
           - unique
           - not_null
 
-  - name: d_secenario
+  - name: d_scenario
     columns:
       - name: id
         tests:
@@ -246,27 +246,31 @@ models:
           - not_null
 
   # Composite primary key: op + session_id + user_role_id + score
-  - name: m_session_learner
+  - name: m_session_learner  
+
     tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - op
-            - session_id
-            - user_role_id
-            - score
+    - dbt_utils.unique_combination_of_columns:
+        name: unique_session_user
+        arguments:
+        combination_of_columns:
+          - session_id
+          - user_role_id
+
     columns:
-      - name: op
-        tests:
-          - not_null
-      - name: session_id
-        tests:
-          - not_null
-      - name: user_role_id
-        tests:
-          - not_null
-      - name: score
-        tests:
-          - not_null
+    - name: session_id
+      tests:
+        - not_null
+
+    - name: user_role_id
+      tests:
+        - not_null
+
+    - name: has_d_value
+      tests:
+        - not_null
+        - accepted_values:
+            arguments:
+              values: [0]
 
   # Composite primary key: scenario_id + team_id
   - name: m_scenario_team
@@ -372,30 +376,7 @@ models:
         tests:
           - not_null
 
-  - name: m_session_test  
 
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          name: unique_session_user
-          combination_of_columns:
-            - session_id
-            - user_role_id
-
-    columns:
-      - name: session_id
-        tests:
-          - not_null
-
-      - name: user_role_id
-        tests:
-          - not_null
-
-      - name: has_d_value
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: [0]
   # No primary key defined — add PK columns manually before enabling tests
   # - name: f_confidence
   #   description: "Primary key not defined. Please specify the PK column(s)."

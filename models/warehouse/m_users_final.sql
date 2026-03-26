@@ -59,7 +59,7 @@ left join
 left join
     {{ ref('m_scenario_team') }} scenario_team on team.id = scenario_team.team_id
 left join
-    {{ ref('d_secenario') }} scenario on scenario_team.scenario_id = scenario.id
+    {{ ref('d_scenario') }} scenario on scenario_team.scenario_id = scenario.id
 left join
     {{ ref('d_project') }} project on scenario.project_id = project.id
 group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14

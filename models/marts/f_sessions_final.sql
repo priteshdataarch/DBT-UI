@@ -97,7 +97,7 @@ select
 from
      merged_sessions ms 
 left join 
-    {{ ref('d_secenario')}} scenario 
+    {{ ref('d_scenario')}} scenario 
 on 
     ms.scenario_id = scenario.id
 left join 

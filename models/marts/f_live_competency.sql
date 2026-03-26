@@ -42,7 +42,7 @@ select
         ls.skill_name as skill,
         ls.skill_score as skill_score,
         ls.score as SessionScore,
-        DENSE_RANK() OVER (PARTITION BY sf.client_user_role_id , ls.skill_name ORDER BY sf.start_date ASC) as CompetencyAttempt,
+        ROW_NUMBER() OVER (PARTITION BY  sf.scenario_name,sf.client_user_role_id ,ls.skill_name ORDER BY sf.start_date ASC) as CompetencyAttempt,
         --ls.webportal,
         --ls.finished,
         --ls.recordeddate,
@@ -65,9 +65,9 @@ left join
     {{ ref('f_live_skills')}} ls
 on      sf.session_id = ls.mursionsessionid and sf.session_type = 'live'
 left join 
-    {{ ref('d_secenario')}} sc on sf.scenario_id = sc.id
+    {{ ref('d_scenario')}} sc on sf.scenario_id = sc.id
 left join 
-    {{ ref('d_events')}} e on sc.id = e.scenario_id and e.archived=false
+    {{ ref('d_events')}} e on sc.id = e.scenario_id  and ls.event_number = e.events_sequence and e.archived=false
 left join 
     {{ ref('f_building_blocks')}} bb on e.skill_id = bb.id and bb.archived = false
 where sf.session_type = 'live' and sf.status = 'COMPLETED' and sc.generation_type = 1
