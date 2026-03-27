@@ -39,7 +39,8 @@ select
         sf.session_type,
         coalesce(os.skill, ls.skill_name) as skill,
         coalesce(os.skill_score, ls.skill_score) as skill_score,
-        coalesce(os.SessionScore, ls.score) as SessionScore
+        coalesce(os.SessionScore, ls.score) as SessionScore,
+        row_number() over(partition by sf.client_id, sf.user_id, coalesce(os.skill, ls.skill_name), sf.session_type order by sf.start_date asc) as attempt
         --ls.webportal,
         --ls.finished,
         --ls.recordeddate,
