@@ -159,7 +159,11 @@ unpivoted.webportal,
 unpivoted.finished, 
 unpivoted.recordeddate,
 unpivoted.generationType, 
-unpivoted.score, 
+CASE 
+    WHEN unpivoted.score >= 3 THEN 1
+    WHEN unpivoted.score IS NULL THEN NULL
+    ELSE 0
+END AS score,
 unpivoted.strengthAssessmentId, 
 unpivoted.opportunitiesAssessmentId, 
 event_number, 

@@ -42,7 +42,7 @@ select
         ls.skill_name as skill,
         ls.skill_score as skill_score,
         ls.score as SessionScore,
-        ROW_NUMBER() OVER (PARTITION BY  sf.scenario_name,sf.client_user_role_id ,ls.skill_name ORDER BY sf.start_date ASC) as CompetencyAttempt,
+        ROW_NUMBER() OVER (PARTITION BY sf.client_user_role_id ,ls.skill_name ORDER BY sf.start_date ASC) as CompetencyAttempt,
         --ls.webportal,
         --ls.finished,
         --ls.recordeddate,
