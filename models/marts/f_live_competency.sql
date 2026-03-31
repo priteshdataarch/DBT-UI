@@ -11,6 +11,9 @@
 ) }}
 
 select 
+        sf.session_id,
+        sf.scenario_id,
+        sf.client_user_role_id,
         sf.client_id,
         sf.user_id,
         sf.user_activation_date,
@@ -18,14 +21,11 @@ select
         sf.client_archived,
         sf.client_operated_by,
         sf.user_role,
-        sf.client_user_role_id,
         sf.team_id,
         sf.team_name,
-        sf.scenario_id,
         sf.scenario_name,
         sf.project_id,
         sf.project_name,
-        sf.session_id,
         sf.status,
         sf.actual_start_date,
         sf.actual_end_date,
@@ -39,36 +39,52 @@ select
         sf.session_type,
         ls.event_number,
         ls.CompetencyID,
-        ls.skill_name as skill,
         ls.skill_score as skill_score,
         ls.score as SessionScore,
-        ROW_NUMBER() OVER (PARTITION BY sf.client_user_role_id ,ls.skill_name ORDER BY sf.start_date ASC) as CompetencyAttempt,
+        ls.skill_name as skill,
+        bb.title,
+        ls.old_skill_name,
+        (
+        SELECT title
+        FROM {{ ref('f_skill_domain_mapping') }} d
+        LEFT JOIN {{ ref('f_building_blocks') }} bb2 ON d.domain_id = bb2.id
+        WHERE bb.id = d.skill_id
+    ) AS domain,
+    ROW_NUMBER() OVER (
+        PARTITION BY sf.client_user_role_id, bb.title
+        ORDER BY sf.start_date ASC
+    ) AS CompetencyAttempt,
+        ROW_NUMBER() OVER (PARTITION BY sf.client_user_role_id ,ls.old_skill_name,sf.scenario_id,ls.event_number ORDER BY sf.start_date ASC) as lattempt,
         --ls.webportal,
         --ls.finished,
         --ls.recordeddate,
        -- ls.generationType,
         --ls.score,
         --ls.event_number,
-       -- ls.skill_id,
+       ls.skill_id,
         --ls.skill_name,
         --ls.building_block_type,
         --ls.level,
         --ls.domain_id,
-        --ls.mindset_id,
+        ls.mindset_id,
         ls.mindset_type,
         sc.generation_type as scenario_generation_type,
         sc.licensee_id as scenario_licensee_id,
-        e.events_sequence
+        e.events_sequence,
+        bb.id,
+        bb.archived,
+        bb.building_block_type,
+        ls.new_skill_name
 from 
     {{ ref('f_team_sessions_final')}} sf
 left join 
-    {{ ref('f_live_skills')}} ls
-on      sf.session_id = ls.mursionsessionid and sf.session_type = 'live'
-left join 
     {{ ref('d_scenario')}} sc on sf.scenario_id = sc.id
+left join 
+    {{ ref('f_live_skills')}} ls on  sf.session_id = ls.mursionsessionid and sf.session_type = 'live'
 left join 
     {{ ref('d_events')}} e on sc.id = e.scenario_id  and ls.event_number = e.events_sequence and e.archived=false
 left join 
     {{ ref('f_building_blocks')}} bb on e.skill_id = bb.id and bb.archived = false
 where sf.session_type = 'live' and sf.status = 'COMPLETED' and sc.generation_type = 1
+ORDER BY sf.session_id ASC
 
