@@ -73,8 +73,7 @@ select
         e.events_sequence,
         bb.id,
         bb.archived,
-        bb.building_block_type,
-        ls.new_skill_name
+        bb.building_block_type
 from 
     {{ ref('f_team_sessions_final')}} sf
 left join 

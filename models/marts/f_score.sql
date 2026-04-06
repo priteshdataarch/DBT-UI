@@ -23,6 +23,7 @@ select
         sf.team_name,
         sf.scenario_id,
         sf.scenario_name,
+        sf.customized_scenario_name,
         sf.project_id,
         sf.project_name,
         sf.session_id,
@@ -74,6 +75,8 @@ left join
     {{ref('d_events')}} e on sf.scenario_id = e.scenario_id  and ls.event_number = e.events_sequence and e.archived=false
 left join
     {{ ref('f_building_blocks') }} bb on e.skill_id = bb.id
+    
 
-where sf.user_role='learner' and sf.status = 'COMPLETED' and sf.scenario_generation_type = 1
+where sf.user_role='learner'
+and sf.scenario_generation_type = 1
 ORDER BY sf.session_id ASC

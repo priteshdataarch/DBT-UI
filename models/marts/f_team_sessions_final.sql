@@ -135,6 +135,10 @@ select
     coalesce(scenario_client.id, ucr.client_id) as client_id,
     aus.user_id,
     ucr.user_activation_date,
+    users.first_name,
+    users.last_name,
+    users.email,
+    concat(users.first_name, ' ', users.last_name) as full_name,
     coalesce(scenario_client.name, ucr.client_name) as client_name,
     coalesce(scenario_client.archived, ucr.client_archived) as client_archived, 
     coalesce(scenario_client.operated_by, ucr.client_operated_by) as client_operated_by,
@@ -144,6 +148,7 @@ select
     aus.team_name,
     aus.scenario_id,
     scenario.name as scenario_name,
+    scenario.name_customized as customized_scenario_name,
     scenario.project_id as project_id,
     project.name as project_name,
 
@@ -179,6 +184,8 @@ left join
     on sessions.learner_id = aus.user_id  
     and sessions.scenario_id = aus.scenario_id
     --where scenario_client.licensee_id = 'mursion'
+left join 
+    {{ ref('d_users') }} users on aus.user_id = users.id
 )
 select *
 from base
@@ -189,6 +196,10 @@ select
     'd2f80bc4-6d31-4634-b4a3-338348ebf1dc' as client_id, 
     user_id,
     user_activation_date,
+    first_name,
+    last_name,
+    email,
+    full_name,
     client_name,
     client_archived,
     client_operated_by,
@@ -198,6 +209,7 @@ select
     team_name,
     scenario_id,
     scenario_name,
+    customized_scenario_name,
     project_id,
     project_name,
     session_id,
@@ -224,6 +236,10 @@ select
     '7d3c6a30-b724-4165-b40c-6301fd92f985' as client_id, 
     user_id,
     user_activation_date,
+    first_name,
+    last_name,
+    email,
+    full_name,
     client_name,
     client_archived,
     client_operated_by,
@@ -233,6 +249,7 @@ select
     team_name,
     scenario_id,
     scenario_name,
+    customized_scenario_name,
     project_id,
     project_name,
     session_id,
