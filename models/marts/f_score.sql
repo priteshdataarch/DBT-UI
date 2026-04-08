@@ -56,9 +56,15 @@ select
         --ls.level,
         --ls.domain_id,
         --ls.mindset_id,
+        sb.id scenario_bank_id,
+        sb.min_passing_score,
         ls.skill_name as domain,
         bb.title,
         ls.mindset_type,
+        CASE 
+            WHEN ls.mindset_type = 'Positive' THEN 1
+            ELSE 0
+        END AS levent_status,
         ls.old_skill_name,
         row_number() over(partition by sf.client_user_role_id, coalesce(os.skill, bb.title) order by sf.start_date asc) as CompetencyAttempt
 
@@ -75,7 +81,8 @@ left join
     {{ref('d_events')}} e on sf.scenario_id = e.scenario_id  and ls.event_number = e.events_sequence and e.archived=false
 left join
     {{ ref('f_building_blocks') }} bb on e.skill_id = bb.id
-    
+left join 
+    {{ ref('d_scenario_bank_event_scoring') }} sb on sb.scenario_id = sf.scenario_id
 
 where sf.user_role='learner'
 and sf.scenario_generation_type = 1
