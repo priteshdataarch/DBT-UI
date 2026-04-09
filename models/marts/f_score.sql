@@ -80,7 +80,7 @@ on      sf.session_id = ls.mursionsessionid and sf.session_type = 'live'
 left join 
     {{ref('d_events')}} e on sf.scenario_id = e.scenario_id  and ls.event_number = e.events_sequence and e.archived=false
 left join
-    {{ ref('f_building_blocks') }} bb on e.skill_id = bb.id
+    {{ ref('d_building_blocks') }} bb on e.skill_id = bb.id
 left join 
     {{ ref('d_scenario_bank_event_scoring') }} sb on sb.scenario_id = sf.scenario_id
 

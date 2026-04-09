@@ -22,4 +22,4 @@
     LEFT JOIN 
         {{ ref('f_skill_domain_mapping') }} AS dm ON l.skill_id = dm.skill_id
     LEFT JOIN 
-        {{ ref('f_building_blocks') }} AS bb ON dm.domain_id = bb.id
+        {{ ref('d_building_blocks') }} AS bb ON dm.domain_id = bb.id

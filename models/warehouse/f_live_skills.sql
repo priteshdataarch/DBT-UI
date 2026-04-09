@@ -205,8 +205,8 @@ on
 LEFT JOIN 
         {{ ref('f_skill_domain_mapping') }} AS dm ON unpivoted.skill_id = dm.skill_id
 LEFT JOIN 
-        {{ ref('f_building_blocks') }} AS bb ON dm.domain_id = bb.id
+        {{ ref('d_building_blocks') }} AS bb ON dm.domain_id = bb.id
 left join 
         {{ ref('f_events_mindset') }} AS em ON em.id = unpivoted.mindset_id
 left join 
-        {{ ref('f_building_blocks') }} AS bb1 ON em.mindset_id = bb1.id
+        {{ ref('d_building_blocks') }} AS bb1 ON em.mindset_id = bb1.id
