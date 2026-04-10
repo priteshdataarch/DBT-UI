@@ -2,20 +2,6 @@ version: 2
 
 models:
 
-  - name: d_learner_confidence
-    columns:
-      - name: session_id
-        tests:
-          - unique
-          - not_null
-
-  - name: m_skill_score_mindset
-    columns:
-      - name: events_mindset_id
-        tests:
-          - unique
-          - not_null
-
   - name: d_building_blocks
     columns:
       - name: id
@@ -37,13 +23,6 @@ models:
           - unique
           - not_null
 
-  - name: d_events_mindset
-    columns:
-      - name: id
-        tests:
-          - unique
-          - not_null
-
   - name: d_industry
     columns:
       - name: id
@@ -51,21 +30,21 @@ models:
           - unique
           - not_null
 
-  - name: d_licensee
+  - name: d_learner_confidence
     columns:
-      - name: id
+      - name: session_id
+        tests:
+          - unique
+          - not_null
+
+  - name: d_post_simulation
+    columns:
+      - name: mursionsessionid
         tests:
           - unique
           - not_null
 
   - name: d_project
-    columns:
-      - name: id
-        tests:
-          - unique
-          - not_null
-
-  - name: d_scenario_bank_event_scoring
     columns:
       - name: id
         tests:
@@ -79,25 +58,26 @@ models:
           - unique
           - not_null
 
-  - name: d_session_details
+  - name: d_scenario_bank_event_scoring
     columns:
       - name: id
         tests:
           - unique
           - not_null
 
-  - name: d_session_flow_event
-    columns:
-      - name: id
-        tests:
-          - unique
-          - not_null
+  - name: d_scenario_goals
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - scenario_id
+            - goal_index
 
-  - name: d_skill_score
     columns:
-      - name: id
+      - name: scenario_id
         tests:
-          - unique
+          - not_null
+      - name: goal_index
+        tests:
           - not_null
 
   - name: d_team
@@ -108,13 +88,6 @@ models:
           - not_null
 
   - name: d_users
-    columns:
-      - name: id
-        tests:
-          - unique
-          - not_null
-
-  - name: f_building_blocks
     columns:
       - name: id
         tests:
@@ -142,11 +115,54 @@ models:
           - unique
           - not_null
 
-  - name: f_scenario_bank_event_scoring
+  - name: f_live_skills
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - mursionsessionid
+            - skill_id
+            - event_number
+    columns:
+      - name: mursionsessionid
+        tests:
+          - not_null
+      - name: skill_id
+        tests:
+          - not_null
+      - name: event_number
+        tests:
+          - not_null
+
+  - name: f_ondemand_session
     columns:
       - name: id
         tests:
           - unique
+          - not_null
+
+  - name: f_ondemand_session_event
+    columns:
+      - name: id
+        tests:
+          - unique
+          - not_null
+
+  - name: f_ondemand_skills
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - sessionid
+            - skill
+            - rn
+    columns:
+      - name: sessionid
+        tests:
+          - not_null
+      - name: skill
+        tests:
+          - not_null
+      - name: rn
+        tests:
           - not_null
 
   - name: f_session_insights_service
@@ -163,14 +179,21 @@ models:
           - unique
           - not_null
 
-  - name: f_skill_score
+  - name: f_skill_domain_mapping
+    columns:
+      - name: skill_id
+        tests:
+          - unique
+          - not_null
+
+  - name: f_skill_domain_name
     columns:
       - name: id
         tests:
           - unique
           - not_null
 
-  - name: f_team
+  - name: f_skill_score
     columns:
       - name: id
         tests:
@@ -191,88 +214,6 @@ models:
           - unique
           - not_null
 
-  - name: m_user_client
-    columns:
-      - name: id
-        tests:
-          - unique
-          - not_null
-
-  - name: passed_events
-    columns:
-      - name: id
-        tests:
-          - unique
-          - not_null
-
-  - name: f_ondemand_session
-    columns:
-      - name: id
-        tests:
-          - unique
-          - not_null
-
-  - name: f_ondemand_session_event
-    columns:
-      - name: id
-        tests:
-          - unique
-          - not_null
-
-  # Composite primary key: mursionsessionid + skill_id + event_number
-  - name: f_live_skills
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - mursionsessionid
-            - skill_id
-            - event_number
-    columns:
-      - name: mursionsessionid
-        tests:
-          - not_null
-      - name: skill_id
-        tests:
-          - not_null
-      - name: event_number
-        tests:
-          - not_null
-
-  - name: d_post_simulation
-    columns:
-      - name: mursionsessionid
-        tests:
-          - unique
-          - not_null
-
-  # Composite primary key: op + session_id + user_role_id + score
-  - name: m_session_learner  
-
-    tests:
-    - dbt_utils.unique_combination_of_columns:
-        name: unique_session_user
-        arguments:
-        combination_of_columns:
-          - session_id
-          - user_role_id
-
-    columns:
-    - name: session_id
-      tests:
-        - not_null
-
-    - name: user_role_id
-      tests:
-        - not_null
-
-    - name: has_d_value
-      tests:
-        - not_null
-        - accepted_values:
-            arguments:
-              values: [0]
-
-  # Composite primary key: scenario_id + team_id
   - name: m_scenario_team
     tests:
       - dbt_utils.unique_combination_of_columns:
@@ -287,33 +228,32 @@ models:
         tests:
           - not_null
 
-  # Composite primary key: sessionid + skill + rn
-  - name: f_ondemand_skills
+  - name: m_session_learner
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
-            - sessionid
-            - skill
-            - rn
+            - session_id
+            - user_role_id
     columns:
-      - name: sessionid
+      - name: session_id
         tests:
           - not_null
-      - name: skill
+      - name: user_role_id
         tests:
           - not_null
-      - name: rn
+      - name: has_d_value
         tests:
           - not_null
+          - accepted_values:
+              values: [0]
 
-  - name: f_skill_domain_mapping
+  - name: m_skill_score_mindset
     columns:
-      - name: skill_id
+      - name: events_mindset_id
         tests:
           - unique
           - not_null
 
-  # Composite primary key: team_id + user_role_id
   - name: m_team_member
     tests:
       - dbt_utils.unique_combination_of_columns:
@@ -328,73 +268,9 @@ models:
         tests:
           - not_null
 
-  - name: d_users_final
+  - name: m_user_client
     columns:
-      - name: user_id
+      - name: id
         tests:
           - unique
           - not_null
-
-
-
-  # Composite primary key: user_role_id + scenario_id + attempt
-  - name: d_scenario_attempt
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - user_role_id
-            - scenario_id
-            - attempt
-    columns:
-      - name: user_role_id
-        tests:
-          - not_null
-      - name: scenario_id
-        tests:
-          - not_null
-      - name: attempt
-        tests:
-          - not_null
-
-
-  # Composite primary key: user_role_id + scenario_id + attempt
-  - name: scenario_attempt
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - user_role_id
-            - scenario_id
-            - attempt
-    columns:
-      - name: user_role_id
-        tests:
-          - not_null
-      - name: scenario_id
-        tests:
-          - not_null
-      - name: attempt
-        tests:
-          - not_null
-
-
-  # No primary key defined — add PK columns manually before enabling tests
-  # - name: f_confidence
-  #   description: "Primary key not defined. Please specify the PK column(s)."
-
-  # - name: f_live_scoring
-  #   description: "Primary key not defined. Please specify the PK column(s)."
-
-  # - name: f_ondemand_scoring
-  #   description: "Primary key not defined. Please specify the PK column(s)."
-
-  # - name: f_scenario_goals__ha
-  #   description: "Primary key not defined. Please specify the PK column(s)."
-
-  # - name: f_score
-  #   description: "Primary key not defined. Please specify the PK column(s)."
-
-  # - name: f_sessions_final
-  #   description: "Primary key not defined. Please specify the PK column(s)."
-
-  # - name: f_team_sessions_final
-  #   description: "Primary key not defined. Please specify the PK column(s)."

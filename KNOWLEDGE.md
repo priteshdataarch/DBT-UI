@@ -11,6 +11,8 @@ This is a **dbt (data build tool)** project that transforms raw application data
 - **Output AWS region:** `us-west-2`
 - **S3 bucket:** `s3://mersion-dbt-athena/`
 - **Target schema:** `dbt`
+- **Table type:** Iceberg (default), Parquet format, Snappy compression
+- **Target file size:** 52428800 bytes (50 MB)
 - **Package dependency:** `dbt-labs/dbt_utils` v1.1.1
 
 ---
@@ -116,45 +118,36 @@ Warehouse models are joined and unioned (live + on-demand sessions) into wide ta
 | `m_user_client` | table | Active `raw_client_user` deduped by `id` |
 | `m_client_user_role` | table | `raw_client_user_role` deduped by `id`/`version` |
 | `m_team_member` | table | Team–user-role pairs; excludes `op = 'D'` |
-| `m_scenario_team` | **view** | Scenario–team assignments (CDC caveat noted) |
+| `m_scenario_team` | view | Scenario–team assignments (CDC caveat noted) |
 | `m_scenario_building_block` | table | Scenario–building-block pairs |
-| `m_session_learner` | **view** | Pass-through `raw_session_learner` (CDC caveat) |
-| `m_session_learner_t` | **view** | Distinct session–learner rows; removes deleted sessions |
-| `m_skill_score_mindset` | **view** | Joins `d_events_mindset` → `d_building_blocks` on mindset_id |
-| `m_users_final` | table (**disabled**) | Wide user–client–role–team–scenario join |
+| `m_session_learner` | view | Pass-through `raw_session_learner` (CDC caveat) |
+| `m_skill_score_mindset` | view | Joins `d_events_mindset` → `d_building_blocks` on mindset_id |
 
 ### Warehouse — Facts (`f_*`)
 
 | Model | Materialization | Description |
 |-------|----------------|-------------|
 | `f_live_session` | table | Deduped `raw_session`; adds `session_date` |
-| `f_ondemand_session` | **view** | Deduped on-demand sessions (CDC caveat) |
-| `f_ondemand_session_event` | **view** | Pass-through `raw_ondemand_session_event` |
+| `f_ondemand_session` | view | Deduped on-demand sessions (CDC caveat) |
+| `f_ondemand_session_event` | view | Pass-through `raw_ondemand_session_event` |
 | `f_session_score` | table | Deduped `raw_session_score` |
 | `f_skill_score` | table | Deduped `raw_skill_score` |
 | `f_skill_domain_mapping` | table | Skill→domain mapping; excludes deletes/archived |
-| `f_skill_domain_name` | table (**disabled**) | Skill/domain names via live skills + domains |
+| `f_skill_domain_name` | table | Skill/domain names via live skills + domains |
 | `f_building_blocks` | table | Deduped `raw_building_blocks` (CDC); non-archived |
 | `f_events_assessment` | table | Deduped `raw_events_assessment`, non-archived |
 | `f_events_mindset` | table | Deduped `raw_events_mindset` |
 | `f_session_insights_service` | table | Deduped `raw_session_insights_service` |
 | `f_live_skills` | table | Core live skill facts: unpivots 5 sim-feedback events per session; derives `skill_score` from mindset titles |
-| `f_live_skills_test` | table (**disabled**) | Simpler variant of live skills |
 | `f_ondemand_skills` | table | Ranks skill scores per on-demand session (`ROW_NUMBER`) |
 
 ### Marts
 
 | Model | Materialization | Description |
 |-------|----------------|-------------|
-| `d_users_final` | table | Learner-centric user dimension (role = `learner`) |
 | `f_sessions_final` | table | **Union** of live + on-demand sessions with scenario/project/client context |
-| `f_team_sessions_final` | table | Wide user–team–scenario–session grain for dashboards; includes historical scenario-team logic and client-ID remapping |
-| `f_score` | table | `f_team_sessions_final` + skill scores (live or on-demand by `session_type`) |
-| `f_confidence` | table | `f_team_sessions_final` + `d_learner_confidence`; pre/post confidence fields with attempt numbering |
-| `f_scenario_attempt` | table | Completed Mursion-licensee sessions + `d_post_simulation`; attempt ordered by start; Q4 confidence fields |
-| `f_live_competency` | table | Live completed sessions (`generation_type = 1`) with competency metrics and `DENSE_RANK` attempt numbering |
-| `f_user_team_final` | **view** | `d_users_final` + `m_team_member` + `d_team` |
-| `copy` | table (**disabled**) | Alternate `f_team_sessions_final` variant |
+| `f_team_sessions_final` | table | Wide user–team–scenario–session grain for dashboards; includes user-client-role and scenario details |
+| `f_score` | table | `f_team_sessions_final` + skill scores (live or on-demand by `session_type`) with competency attempts |
 
 ---
 
@@ -194,13 +187,11 @@ Multiple models compute an **attempt number** using `ROW_NUMBER()` or `DENSE_RAN
 
 | Issue | Location | Notes |
 |-------|----------|-------|
-| `d_seecnario` typo | `f_sessions_final.sql`, `f_team_sessions_final.sql`, `m_users_final.sql`, `warehouse/schema.yml` | Should be `d_scenario`; these refs will fail unless `d_scenario` is aliased or defined elsewhere |
-| `warehouse/schema.yml` drift | `warehouse/schema.yml` | References many models that no longer exist as `.sql` files (e.g. `d_licensee`, `d_skill_score`, `d_session_details`, `f_team`, `d_users_final` under warehouse) |
-| Commented-out test blocks | `warehouse/schema.yml`, `marts/schema.yml` | Several PK tests for mart models are commented out |
-| YAML nesting issue | `marts/schema.yml` | `f_user_team_final` and `f_scenario_attempt` blocks may be nested under a comment in a way that could fail `dbt parse` |
+| Schema drift in `warehouse/schema.yml` | `warehouse/schema.yml` | References to models that no longer exist as `.sql` files (e.g. `d_licensee`, `d_session_details`, `d_session_flow_event`, `d_skill_score`, `f_team`, `passed_events`, `d_scenario_attempt`, `scenario_attempt`) should be removed or addressed |
+| Test deprecation warnings | `marts/schema.yml` | `f_user_team_final` test references may cause warnings if that model no longer exists |
+| Materialization overrides | Various models | Some models override default `table` materialization with `view`: `f_ondemand_session`, `f_ondemand_session_event`, `m_scenario_team`, `m_session_learner`, `m_skill_score_mindset` |
 | No seeds despite `dbt seed` in CI | `DEVOPS_SETUP.md` | CI references `dbt seed` but no seed CSVs exist in the repo |
 | Hard-coded client ID remapping | `f_team_sessions_final.sql` | Two `UNION ALL` blocks remap specific client IDs for a single source client; this is business logic, not a bug |
-| Disabled models | multiple | `m_users_final`, `f_skill_domain_name`, `f_live_skills_test`, `copy` are `enabled: false` and may be stale |
 
 ---
 
@@ -255,8 +246,5 @@ The following mart tables are the primary outputs consumed by QuickSight dashboa
 |-------|-------------|
 | `f_team_sessions_final` | Core session-level fact for team/scenario dashboards |
 | `f_score` | Skill scores per session |
-| `f_confidence` | Pre/post learner confidence by attempt |
-| `f_scenario_attempt` | Post-simulation survey responses by attempt |
-| `f_live_competency` | Live session competency scores by attempt |
-| `f_user_team_final` | User–team membership dimension |
-| `d_users_final` | Learner dimension |
+| `f_sessions_final` | live and ondemand sessions data |
+

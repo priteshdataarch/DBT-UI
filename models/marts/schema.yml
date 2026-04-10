@@ -1,6 +1,6 @@
-version: 2
+# version: 2
 
-models:
+# models:
 #   - name: f_sessions_final
 #     description: "Merged fact table combining live and on-demand sessions with scenario and learner details."
 #     tests:
@@ -9,39 +9,3 @@ models:
 #             combination_of_columns:
 #               - id
 #               - learner_id
-
-
-  # Composite primary key: user_id + team_id
-    - name: f_user_team_final
-      tests:
-        - dbt_utils.unique_combination_of_columns:
-            combination_of_columns:
-              - user_id
-              - team_id
-      columns:
-        - name: user_id
-          tests:
-            - not_null
-        - name: team_id
-          tests:
-            - not_null
-
-
-  # Composite primary key: user_role_id + scenario_id + attempt
-    - name: f_scenario_attempt
-      tests:
-        - dbt_utils.unique_combination_of_columns:
-            combination_of_columns:
-              - client_user_role_id
-              - scenario_id
-              - attempt
-      columns:
-        - name: client_user_role_id
-          tests:
-            - not_null
-        - name: scenario_id
-          tests:
-            - not_null
-        - name: attempt
-          tests:
-            - not_null
