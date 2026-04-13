@@ -9,7 +9,7 @@ This is a **dbt (data build tool)** project that transforms raw application data
 - **Query engine:** AWS Athena
 - **Default materialization:** Iceberg tables (Parquet/Snappy)
 - **Output AWS region:** `us-west-2`
-- **S3 bucket:** `s3://mersion-dbt-athena/`
+- **S3 bucket:** `s3://mursion-dbt-athena/`
 - **Target schema:** `dbt`
 - **Table type:** Iceberg (default), Parquet format, Snappy compression
 - **Target file size:** 52428800 bytes (50 MB)
@@ -33,7 +33,7 @@ See `DEVOPS_SETUP.md` for full setup instructions.
 ## Project Structure
 
 ```
-mersion_dbt_athena/
+mursion_dbt_athena/
 ├── models/
 │   ├── sources/
 │   │   └── application_db/
@@ -230,8 +230,8 @@ mursion_dbt_athena:
       database: awsdatacatalog
       schema: dbt
       region_name: us-west-2
-      s3_data_dir: s3://mersion-dbt-athena/data_dir/
-      s3_staging_dir: s3://mersion-dbt-athena/staging_dir/
+      s3_data_dir: s3://mursion-dbt-athena/data_dir/
+      s3_staging_dir: s3://mursion-dbt-athena/staging_dir/
       threads: 4
       aws_profile_name: mursion_dbt_athena
 ```
