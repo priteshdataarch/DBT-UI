@@ -135,6 +135,10 @@ select
     coalesce(scenario_client.id, ucr.client_id) as client_id,
     aus.user_id,
     ucr.user_activation_date,
+    users.first_name,
+    users.last_name,
+    users.email,
+    concat(users.first_name, ' ', users.last_name) as full_name,
     coalesce(scenario_client.name, ucr.client_name) as client_name,
     coalesce(scenario_client.archived, ucr.client_archived) as client_archived, 
     coalesce(scenario_client.operated_by, ucr.client_operated_by) as client_operated_by,
@@ -144,6 +148,7 @@ select
     aus.team_name,
     aus.scenario_id,
     scenario.name as scenario_name,
+    scenario.name_customized as customized_scenario_name,
     scenario.project_id as project_id,
     project.name as project_name,
 
@@ -159,7 +164,9 @@ select
     sessions.late_canceled, 
     sessions.final_session_sub_status, 
     sessions.session_date, 
-    sessions.session_type
+    sessions.session_type,
+    scenario.generation_type as scenario_generation_type
+    
       --  scenario.project_id as scenario_project_id,
       --  scenario.client_id as scenario_client_id
 from 
@@ -167,7 +174,7 @@ from
 left join
     user_client_role ucr on aus.user_id = ucr.user_id
 left join
-    {{ ref('d_secenario') }} scenario on aus.scenario_id = scenario.id
+    {{ ref('d_scenario') }} scenario on aus.scenario_id = scenario.id
 left join 
     {{ ref('d_client') }} scenario_client on scenario.client_id = scenario_client.id  
 left join 
@@ -177,6 +184,8 @@ left join
     on sessions.learner_id = aus.user_id  
     and sessions.scenario_id = aus.scenario_id
     --where scenario_client.licensee_id = 'mursion'
+left join 
+    {{ ref('d_users') }} users on aus.user_id = users.id
 )
 select *
 from base
@@ -187,6 +196,10 @@ select
     'd2f80bc4-6d31-4634-b4a3-338348ebf1dc' as client_id, 
     user_id,
     user_activation_date,
+    first_name,
+    last_name,
+    email,
+    full_name,
     client_name,
     client_archived,
     client_operated_by,
@@ -196,6 +209,7 @@ select
     team_name,
     scenario_id,
     scenario_name,
+    customized_scenario_name,
     project_id,
     project_name,
     session_id,
@@ -209,7 +223,8 @@ select
     late_canceled,
     final_session_sub_status,
     session_date,
-    session_type
+    session_type,
+    scenario_generation_type
 from base
 where base.client_id = '55d98b8a-a265-4be5-aa95-e32eeeb4e5d9'
 
@@ -221,6 +236,10 @@ select
     '7d3c6a30-b724-4165-b40c-6301fd92f985' as client_id, 
     user_id,
     user_activation_date,
+    first_name,
+    last_name,
+    email,
+    full_name,
     client_name,
     client_archived,
     client_operated_by,
@@ -230,6 +249,7 @@ select
     team_name,
     scenario_id,
     scenario_name,
+    customized_scenario_name,
     project_id,
     project_name,
     session_id,
@@ -243,6 +263,7 @@ select
     late_canceled,
     final_session_sub_status,
     session_date,
-    session_type
+    session_type,
+    scenario_generation_type
 from base
 where base.client_id = '55d98b8a-a265-4be5-aa95-e32eeeb4e5d9'

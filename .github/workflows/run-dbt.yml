@@ -27,17 +27,18 @@ jobs:
       - name: Pull latest dbt image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: mersion-dbt-athena
+          ECR_REPOSITORY: mursion-dbt-athena
         run: |
           docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
       - name: Run dbt seed and dbt run
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: mersion-dbt-athena
+          ECR_REPOSITORY: mursion-dbt-athena
         run: |
           docker run --rm \
             -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
             -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
             -e AWS_DEFAULT_REGION=us-west-2 \
-            $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            sh -c "dbt seed && dbt run"

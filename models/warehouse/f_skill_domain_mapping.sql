@@ -15,7 +15,7 @@ with base as (
 select 
     *
    
-    , row_number() over (partition by skill_id, domain_id order by operated_on desc, op desc) as row_number
+    , row_number() over (partition by skill_id order by operated_on desc, op desc) as row_number
      --date(start_date) as session_date
 from {{ source('application_db', 'raw_skill_domain_mapping') }}
 )

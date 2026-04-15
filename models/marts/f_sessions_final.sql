@@ -37,9 +37,9 @@ live_sesisons as (
     left join
         {{ ref('m_client_user_role')}} cur
     on
-        cur.id = sl.user_role_id
+        cur.id = sl.user_role_id and cur.role = 'learner'
     left join 
-        {{ ref('f_live_skills')}} lsk
+        (select mursionSessionId, max(score) as score from {{ ref('f_live_skills')}} lsk group by mursionSessionId) lsk
     on
         ls.id = lsk.mursionsessionid
 
@@ -97,7 +97,7 @@ select
 from
      merged_sessions ms 
 left join 
-    {{ ref('d_secenario')}} scenario 
+    {{ ref('d_scenario')}} scenario 
 on 
     ms.scenario_id = scenario.id
 left join 

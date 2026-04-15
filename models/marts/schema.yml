@@ -1,0 +1,11 @@
+# version: 2
+
+# models:
+#   - name: f_sessions_final
+#     description: "Merged fact table combining live and on-demand sessions with scenario and learner details."
+#     tests:
+#       - dbt_utils.unique_combination_of_columns:
+#           arguments:
+#             combination_of_columns:
+#               - id
+#               - learner_id
