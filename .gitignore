@@ -210,3 +210,7 @@ __marimo__/
 dbt_packages/
 logs/
 #profiles.yml
+
+dbt-ui/.env.local
+node_modules/
+.next/
