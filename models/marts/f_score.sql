@@ -1,3 +1,4 @@
+-- Final Model
 {{ config(
     materialized = 'table',
     
