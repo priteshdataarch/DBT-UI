@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: abc
+    catalog: AwsDataCatalog
+    schema: prod-raw
+    tables:
+
+      - name: abc
+        description: abc data from production
