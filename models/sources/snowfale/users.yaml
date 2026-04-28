@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: snowflake
+    catalog: AwsDataCatalog
+    schema: prod-users
+    tables:
+
+      - name: users
+        description: users data from production
