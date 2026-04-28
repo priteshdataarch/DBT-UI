@@ -17,3 +17,9 @@ sources:
 
       - name: oop
         description: oop data from production
+
+      - name: uv
+        description: uv data from production
+        columns:
+        - name: id
+          data_type: text
