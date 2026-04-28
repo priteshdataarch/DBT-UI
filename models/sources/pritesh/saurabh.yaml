@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: pritesh
+    catalog: AwsDataCatalog
+    schema: abhishek
+    tables:
+
+      - name: saurabh
+        description: saurabh data from production
