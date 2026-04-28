@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: snowflake
+    catalog: AwsDataCatalog
+    schema: prod-raw
+    tables:
+
+      - name: raw_user_name
+        description: raw_user_name data from production
+        columns:
+        - name: user_id
+          data_type: string
