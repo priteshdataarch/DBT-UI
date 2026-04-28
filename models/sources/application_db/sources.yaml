@@ -89,12 +89,3 @@ sources:
 
       - name: raw_session_insights_service
         description: session insights service data from production
-
-      - name: raw_resource
-        description: raw_resource data from production
-        columns:
-        - name: id
-          data_type: varchar
-
-      - name: raw_resource
-        description: raw_resource data from production
