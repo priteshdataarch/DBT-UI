@@ -89,3 +89,6 @@ sources:
 
       - name: raw_session_insights_service
         description: session insights service data from production
+
+      - name: raw_client_db
+        description: raw_client_db data from production
