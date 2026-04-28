@@ -8,3 +8,9 @@ sources:
 
       - name: users
         description: users data from production
+
+      - name: users
+        description: users data from production
+        columns:
+        - name: user_id
+          data_type: varchar
