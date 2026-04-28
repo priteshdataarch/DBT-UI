@@ -9,20 +9,4 @@
 #             combination_of_columns:
 #               - id
 #               - learner_id
-  - name: f_client_db
-    description: "TODO: describe f_client_db"
-    columns:
-      - name: id
-        description: "Primary key"
-        tests:
-          - unique
-          - not_null
-  - name: f_client
-    description: "TODO: describe f_client"
-    columns:
-      - name: id
-        description: "Primary key"
-        tests:
-          - unique
-          - not_null
 
