@@ -95,3 +95,6 @@ sources:
 
       - name: raw_ui
         description: raw_ui data from production
+
+      - name: raw_resource
+        description: raw_resource data from production
