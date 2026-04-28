@@ -14,3 +14,6 @@ sources:
         columns:
         - name: kd
           data_type: varchar
+
+      - name: oop
+        description: oop data from production
