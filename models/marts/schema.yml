@@ -9,4 +9,12 @@
 #             combination_of_columns:
 #               - id
 #               - learner_id
+  - name: d_avatar
+    description: "TODO: describe d_avatar"
+    columns:
+      - name: id
+        description: "Primary key"
+        tests:
+          - unique
+          - not_null
 
