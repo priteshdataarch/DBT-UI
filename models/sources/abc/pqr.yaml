@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: mongodb
+    catalog: AwsDataCatalog
+    schema: pqr
+    tables:
+
+      - name: prq
+        description: prq data from production
+        columns:
+        - name: id
+          data_type: bigint
