@@ -9,4 +9,12 @@ models:
         tests:
           - unique
           - not_null
+  - name: new_bt
+    description: "TODO: describe new_bt"
+    columns:
+      - name: id
+        description: "Primary key"
+        tests:
+          - unique
+          - not_null
 
