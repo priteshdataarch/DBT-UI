@@ -92,6 +92,3 @@ sources:
 
       - name: raw_resource
         description: raw_resource data from production
-
-      - name: raw_resource
-        description: raw_resource data from production
