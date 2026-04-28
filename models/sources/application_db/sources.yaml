@@ -92,3 +92,6 @@ sources:
 
       - name: raw_client_db
         description: raw_client_db data from production
+
+      - name: raw_ui
+        description: raw_ui data from production
