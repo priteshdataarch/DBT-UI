@@ -95,3 +95,6 @@ sources:
         columns:
         - name: id
           data_type: varchar
+
+      - name: raw_resource
+        description: raw_resource data from production
