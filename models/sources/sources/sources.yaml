@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: sources
+    catalog: AwsDataCatalog
+    schema: AT
+    tables:
+
+      - name: event
+        description: event data from production
+        columns:
+        - name: id
+          data_type: varchar
+          description: primary key
+        - name: revenue
+          data_type: float
+          description: Total revenue
