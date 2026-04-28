@@ -8,3 +8,9 @@ sources:
 
       - name: abc
         description: abc data from production
+
+      - name: ghj
+        description: ghj data from production
+        columns:
+        - name: kd
+          data_type: varchar
