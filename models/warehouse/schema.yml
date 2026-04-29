@@ -274,20 +274,5 @@ models:
         tests:
           - unique
           - not_null
-  - name: f_client_db
-    description: "TODO: describe f_client_db"
-    columns:
-      - name: id
-        description: "Primary key"
-        tests:
-          - unique
-          - not_null
-  - name: d_resource
-    description: "TODO: describe d_resource"
-    columns:
-      - name: id
-        description: "Primary key"
-        tests:
-          - unique
-          - not_null
+
 
