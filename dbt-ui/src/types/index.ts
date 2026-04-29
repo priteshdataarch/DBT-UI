@@ -11,12 +11,14 @@ export interface OpenFileTab {
   name: string;
   content: string;
   isDirty: boolean;
-  language: 'sql' | 'yaml' | 'markdown';
+  language: 'sql' | 'yaml' | 'markdown' | 'csv';
 }
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   sources?: string[];
+  schemaChunks?: string[];
+  mode?: 'sql' | 'authoring' | 'filesystem' | 'error';
   timestamp: Date;
 }

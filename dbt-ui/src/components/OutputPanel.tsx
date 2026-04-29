@@ -1,6 +1,13 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import {
   Terminal,
   ChevronUp,
@@ -11,7 +18,6 @@ import {
   Trash2,
   Table2,
   ExternalLink,
-  Send,
   StopCircle,
 } from 'lucide-react';
 
@@ -27,6 +33,10 @@ export interface PreviewResult {
   rows: Record<string, string>[];
 }
 
+export interface OutputPanelRef {
+  runCommand: (cmd: DbtCommand) => void;
+}
+
 interface OutputLine {
   text: string;
   lineType: 'info' | 'success' | 'error' | 'warning';
@@ -35,7 +45,6 @@ interface OutputLine {
 interface Props {
   open: boolean;
   onToggle: () => void;
-  pendingCommand: (DbtCommand & { _ts?: number }) | null;
   onCommandComplete: (exitCode: number) => void;
   previewResult: PreviewResult | null;
   previewLoading: boolean;
@@ -49,64 +58,77 @@ function parseUserCommand(raw: string): DbtCommand | null {
   const parts = raw.trim().replace(/^dbt\s+/, '').split(/\s+/).filter(Boolean);
   if (!parts.length) return null;
   const [command, ...rest] = parts;
-  const allowed = ['run', 'test', 'compile', 'debug', 'deps', 'docs', 'source', 'seed', 'snapshot', 'build', 'clean', 'list', 'ls'];
+  const allowed = [
+    'run', 'test', 'compile', 'debug', 'deps', 'docs', 'source',
+    'seed', 'snapshot', 'build', 'clean', 'list', 'ls',
+  ];
   if (!allowed.includes(command)) return null;
 
-  // Pull out --select <model> if present
-  const selIdx = rest.indexOf('--select');
   let modelName: string | undefined;
   const args: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--select' && rest[i + 1]) {
       modelName = rest[i + 1];
-      i++; // skip value
+      i++;
     } else {
       args.push(rest[i]);
     }
   }
-
   const label = `dbt ${command}${args.length ? ' ' + args.join(' ') : ''}${modelName ? ' --select ' + modelName : ''}`;
   return { command, args, modelName, label };
 }
 
-export default function OutputPanel({
-  open,
-  onToggle,
-  pendingCommand,
-  onCommandComplete,
-  previewResult,
-  previewLoading,
-  previewError,
-  activeOutputTab,
-  onOutputTabChange,
-}: Props) {
-  const [lines, setLines] = useState<OutputLine[]>([]);
-  const [running, setRunning] = useState(false);
-  const [exitCode, setExitCode] = useState<number | null>(null);
+const lineClass = (t: OutputLine['lineType']) => {
+  if (t === 'success') return 'text-green-400';
+  if (t === 'error')   return 'text-red-400';
+  if (t === 'warning') return 'text-yellow-300';
+  return 'text-[#d4d4d4]';
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+const OutputPanel = forwardRef<OutputPanelRef, Props>(function OutputPanel(
+  {
+    open,
+    onToggle,
+    onCommandComplete,
+    previewResult,
+    previewLoading,
+    previewError,
+    activeOutputTab,
+    onOutputTabChange,
+  },
+  ref
+) {
+  const [lines, setLines]         = useState<OutputLine[]>([]);
+  const [running, setRunning]     = useState(false);
+  const [exitCode, setExitCode]   = useState<number | null>(null);
   const [displayCmd, setDisplayCmd] = useState('');
-  const [elapsed, setElapsed] = useState(0);
-  const [docsUrl, setDocsUrl] = useState<string | null>(null);
-  const [cmdInput, setCmdInput] = useState('');
+  const [elapsed, setElapsed]     = useState(0);
+  const [docsUrl, setDocsUrl]     = useState<string | null>(null);
+  const [cmdInput, setCmdInput]   = useState('');
+  const [history, setHistory]     = useState<string[]>([]);
+  const [historyIdx, setHistoryIdx] = useState(-1);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const startRef = useRef(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const bottomRef  = useRef<HTMLDivElement>(null);
+  const inputRef   = useRef<HTMLInputElement>(null);
+  const startRef   = useRef(0);
+  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef   = useRef<AbortController | null>(null);
+  const onCompleteRef = useRef(onCommandComplete);
+  useEffect(() => { onCompleteRef.current = onCommandComplete; }, [onCommandComplete]);
 
-  // Store onCommandComplete in a ref so runCommand never needs it as a dep
-  const onCommandCompleteRef = useRef(onCommandComplete);
-  useEffect(() => { onCommandCompleteRef.current = onCommandComplete; }, [onCommandComplete]);
-
+  // Auto-scroll on new lines
   useEffect(() => {
-    if (open && activeOutputTab === 'output')
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (open && activeOutputTab === 'output') {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
   }, [lines, open, activeOutputTab]);
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }, []);
 
-  // Stable runCommand — no external deps that change between renders
   const runCommand = useCallback(async (cmd: DbtCommand) => {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
@@ -132,11 +154,11 @@ export default function OutputPanel({
         signal: abortRef.current.signal,
       });
 
-      if (!res.body) throw new Error('No response body from server');
+      if (!res.body) throw new Error('No response body');
 
       const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = '';
+      const dec    = new TextDecoder();
+      let buf      = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -152,18 +174,14 @@ export default function OutputPanel({
               setDisplayCmd(evt.command);
             } else if (evt.type === 'line') {
               const text: string = evt.text ?? '';
-              // Detect docs serve URL
               const urlMatch = text.match(/https?:\/\/\S+/);
               if (urlMatch && cmd.command === 'docs') setDocsUrl(urlMatch[0]);
-              setLines((prev) => [
-                ...prev,
-                { text, lineType: evt.lineType ?? 'info' },
-              ]);
+              setLines((prev) => [...prev, { text, lineType: evt.lineType ?? 'info' }]);
             } else if (evt.type === 'done') {
               setExitCode(evt.exitCode ?? 1);
               setRunning(false);
               stopTimer();
-              onCommandCompleteRef.current(evt.exitCode ?? 1);
+              onCompleteRef.current(evt.exitCode ?? 1);
             }
           } catch { /* skip malformed JSON */ }
         }
@@ -175,17 +193,10 @@ export default function OutputPanel({
       setRunning(false);
       stopTimer();
     }
-  }, [stopTimer]); // ← no onCommandComplete dep — uses ref instead
+  }, [stopTimer]);
 
-  // Only fire when pendingCommand reference actually changes (page.tsx stamps _ts)
-  const lastRunTs = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (!pendingCommand) return;
-    const ts = pendingCommand._ts ?? 0;
-    if (ts === lastRunTs.current) return; // same command, don't re-run
-    lastRunTs.current = ts;
-    runCommand(pendingCommand);
-  }, [pendingCommand, runCommand]);
+  // Expose runCommand to parent via ref so buttons call it directly
+  useImperativeHandle(ref, () => ({ runCommand }), [runCommand]);
 
   useEffect(() => () => stopTimer(), [stopTimer]);
 
@@ -196,35 +207,50 @@ export default function OutputPanel({
     setLines((prev) => [...prev, { text: '— Stopped by user —', lineType: 'warning' }]);
   };
 
-  const handleUserCommand = () => {
-    const cmd = parseUserCommand(cmdInput.trim());
+  const submitCommand = (raw: string) => {
+    const cmd = parseUserCommand(raw.trim());
     if (!cmd) return;
+    setHistory((h) => [raw.trim(), ...h.slice(0, 49)]);
+    setHistoryIdx(-1);
     setCmdInput('');
     onOutputTabChange('output');
     if (!open) onToggle();
     runCommand(cmd);
   };
 
-  const lineClass = (t: OutputLine['lineType']) => {
-    if (t === 'success') return 'text-green-400';
-    if (t === 'error') return 'text-red-400';
-    if (t === 'warning') return 'text-yellow-400';
-    return 'text-[#d4d4d4]';
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      submitCommand(cmdInput);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = Math.min(historyIdx + 1, history.length - 1);
+      setHistoryIdx(next);
+      setCmdInput(history[next] ?? '');
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = Math.max(historyIdx - 1, -1);
+      setHistoryIdx(next);
+      setCmdInput(next === -1 ? '' : history[next]);
+    }
   };
 
   return (
-    <div className="flex flex-col bg-[#1e1e1e] border-t border-[#3e3e42] h-full">
+    <div className="flex flex-col bg-[#0d0d0d] border-t border-[#3e3e42] h-full">
+
       {/* ── Header bar ── */}
-      <div className="flex items-center gap-0 px-2 h-9 border-b border-[#3e3e42] shrink-0 select-none">
+      <div
+        className="flex items-center gap-0 px-2 h-9 border-b border-[#2a2a2a] shrink-0 select-none bg-[#1a1a1a] cursor-pointer"
+        onClick={() => { if (!open) onToggle(); }}
+      >
         {/* Tabs */}
         {(['output', 'preview'] as const).map((tab) => (
           <button
             key={tab}
-            onClick={() => { onOutputTabChange(tab); if (!open) onToggle(); }}
+            onClick={(e) => { e.stopPropagation(); onOutputTabChange(tab); if (!open) onToggle(); }}
             className={`flex items-center gap-1.5 h-full px-3 text-[10px] font-semibold uppercase tracking-widest border-b-2 transition-colors ${
               activeOutputTab === tab
-                ? 'border-[#007acc] text-[#bdbdbd]'
-                : 'border-transparent text-[#5a5a5a] hover:text-[#8b8b8b]'
+                ? 'border-[#007acc] text-[#d4d4d4]'
+                : 'border-transparent text-[#555] hover:text-[#888]'
             }`}
           >
             {tab === 'output' ? <Terminal size={11} /> : <Table2 size={11} />}
@@ -233,28 +259,27 @@ export default function OutputPanel({
           </button>
         ))}
 
-        <div className="w-px h-4 bg-[#3e3e42] mx-2" />
+        <div className="w-px h-4 bg-[#2a2a2a] mx-2" />
 
-        {/* Contextual label */}
         {activeOutputTab === 'output' && displayCmd && (
-          <span className="text-[10px] text-[#5a5a5a] font-mono truncate max-w-[220px]">
+          <span className="text-[10px] text-[#555] font-mono truncate max-w-[260px]">
             {displayCmd}
           </span>
         )}
         {activeOutputTab === 'preview' && previewResult && !previewLoading && (
-          <span className="text-[10px] text-[#5a5a5a] font-mono">
+          <span className="text-[10px] text-[#555] font-mono">
             {previewResult.rows.length} rows × {previewResult.columns.length} cols
           </span>
         )}
 
-        {/* Right side controls */}
         <div className="flex items-center gap-2 ml-auto shrink-0">
           {activeOutputTab === 'output' && running && (
             <>
-              <span className="flex items-center gap-1 text-[10px] text-[#8b8b8b]">
+              <span className="flex items-center gap-1 text-[10px] text-[#888]">
                 <Loader2 size={11} className="animate-spin" />{elapsed}s
               </span>
-              <button onClick={handleStop} title="Stop" className="text-red-400 hover:text-red-300 transition-colors">
+              <button onClick={(e) => { e.stopPropagation(); handleStop(); }} title="Stop"
+                className="text-red-500 hover:text-red-400 transition-colors">
                 <StopCircle size={13} />
               </button>
             </>
@@ -266,18 +291,21 @@ export default function OutputPanel({
           )}
           {docsUrl && (
             <a href={docsUrl} target="_blank" rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="flex items-center gap-1 text-[10px] text-[#4ec9b0] hover:underline">
               <ExternalLink size={11} /> Open Docs
             </a>
           )}
           {activeOutputTab === 'output' && lines.length > 0 && !running && (
-            <button title="Clear" onClick={() => { setLines([]); setExitCode(null); setDisplayCmd(''); setDocsUrl(null); }}
-              className="text-[#5a5a5a] hover:text-[#8b8b8b] transition-colors">
+            <button title="Clear"
+              onClick={(e) => { e.stopPropagation(); setLines([]); setExitCode(null); setDisplayCmd(''); setDocsUrl(null); }}
+              className="text-[#444] hover:text-[#888] transition-colors">
               <Trash2 size={11} />
             </button>
           )}
-          <button onClick={onToggle} title={open ? 'Collapse' : 'Expand'}
-            className="text-[#5a5a5a] hover:text-[#8b8b8b] transition-colors ml-1">
+          <button onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            title={open ? 'Collapse' : 'Expand'}
+            className="text-[#444] hover:text-[#888] transition-colors ml-1">
             {open ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
           </button>
         </div>
@@ -286,13 +314,18 @@ export default function OutputPanel({
       {/* ── Body ── */}
       {open && (
         <div className="flex flex-col flex-1 min-h-0">
+
           {/* Output tab */}
           {activeOutputTab === 'output' && (
-            <>
-              <div className="flex-1 overflow-y-auto p-3 font-mono text-xs leading-5 min-h-0 select-text cursor-text">
+            <div className="flex flex-col flex-1 min-h-0">
+              {/* Scrollable output area — clicking focuses the input */}
+              <div
+                className="flex-1 overflow-y-auto px-4 py-2 font-mono text-xs leading-[1.6] min-h-0 select-text cursor-text"
+                onClick={() => inputRef.current?.focus()}
+              >
                 {lines.length === 0 && !running && (
-                  <p className="text-[#5a5a5a] italic">
-                    Run a dbt command or type one below.
+                  <p className="text-[#3a3a3a] italic mt-2">
+                    No output yet. Run a dbt command using the buttons above or type below.
                   </p>
                 )}
                 {lines.map((line, i) => (
@@ -303,35 +336,52 @@ export default function OutputPanel({
                 <div ref={bottomRef} />
               </div>
 
-              {/* ── Command input bar ── */}
-              <div className="flex items-center gap-1 px-2 py-1.5 border-t border-[#3e3e42] bg-[#252526] shrink-0">
-                <span className="text-[10px] text-[#5a5a5a] font-mono shrink-0">dbt&nbsp;▸</span>
-                <input
-                  value={cmdInput}
-                  onChange={(e) => setCmdInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleUserCommand(); }}
-                  placeholder="run --select model_name   or   compile   or   test"
-                  className="flex-1 bg-transparent text-xs font-mono text-[#d4d4d4] outline-none placeholder-[#4a4a4a]"
-                  spellCheck={false}
-                  disabled={running}
-                />
-                <button
-                  onClick={handleUserCommand}
-                  disabled={running || !cmdInput.trim()}
-                  title="Run command (Enter)"
-                  className="text-[#5a5a5a] hover:text-[#007acc] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Send size={12} />
-                </button>
+              {/* ── Terminal-style prompt input ── */}
+              <div
+                className="shrink-0 border-t border-[#2a2a2a] bg-[#111] px-3 py-2"
+                onClick={() => inputRef.current?.focus()}
+              >
+                <div className="flex items-center gap-2 font-mono text-xs">
+                  {/* Shell-style prompt */}
+                  <span className="text-[#569cd6] shrink-0 select-none">$</span>
+                  <span className="text-[#4ec9b0] shrink-0 select-none">dbt</span>
+                  <span className="text-[#555] shrink-0 select-none">▸</span>
+                  <input
+                    ref={inputRef}
+                    value={cmdInput}
+                    onChange={(e) => setCmdInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="run --select model_name   |   compile   |   docs generate   |   test"
+                    className="flex-1 bg-transparent text-[#d4d4d4] outline-none placeholder-[#333] caret-[#d4d4d4]"
+                    spellCheck={false}
+                    disabled={running}
+                    autoComplete="off"
+                  />
+                  {running ? (
+                    <Loader2 size={11} className="animate-spin text-[#555] shrink-0" />
+                  ) : (
+                    cmdInput.trim() && (
+                      <button
+                        onClick={() => submitCommand(cmdInput)}
+                        className="text-[#569cd6] hover:text-[#79b8ff] text-[10px] shrink-0 transition-colors"
+                      >
+                        ↵
+                      </button>
+                    )
+                  )}
+                </div>
+                <p className="text-[10px] text-[#2a2a2a] mt-1 select-none">
+                  ↑ ↓ history &nbsp;·&nbsp; Enter to run &nbsp;·&nbsp; e.g. run --select my_model
+                </p>
               </div>
-            </>
+            </div>
           )}
 
           {/* Preview tab */}
           {activeOutputTab === 'preview' && (
             <div className="flex-1 overflow-auto min-h-0 select-text">
               {previewLoading && (
-                <div className="flex items-center justify-center h-full gap-2 text-[#8b8b8b] text-xs">
+                <div className="flex items-center justify-center h-full gap-2 text-[#666] text-xs">
                   <Loader2 size={16} className="animate-spin" />Running query on Athena…
                 </div>
               )}
@@ -341,7 +391,7 @@ export default function OutputPanel({
                 </div>
               )}
               {!previewLoading && !previewError && previewResult && previewResult.columns.length === 0 && (
-                <div className="flex items-center justify-center h-full text-[#5a5a5a] text-xs italic">
+                <div className="flex items-center justify-center h-full text-[#555] text-xs italic">
                   Query returned no rows.
                 </div>
               )}
@@ -351,7 +401,7 @@ export default function OutputPanel({
                     <tr>
                       {previewResult.columns.map((col) => (
                         <th key={col}
-                          className="px-3 py-1.5 text-left text-[#9cdcfe] font-semibold bg-[#252526] border-b border-r border-[#3e3e42] whitespace-nowrap">
+                          className="px-3 py-1.5 text-left text-[#9cdcfe] font-semibold bg-[#1a1a1a] border-b border-r border-[#2a2a2a] whitespace-nowrap">
                           {col}
                         </th>
                       ))}
@@ -359,13 +409,13 @@ export default function OutputPanel({
                   </thead>
                   <tbody>
                     {previewResult.rows.map((row, ri) => (
-                      <tr key={ri} className={ri % 2 === 0 ? 'bg-[#1e1e1e]' : 'bg-[#252526]'}>
+                      <tr key={ri} className={ri % 2 === 0 ? 'bg-[#0d0d0d]' : 'bg-[#131313]'}>
                         {previewResult.columns.map((col) => (
                           <td key={col}
-                            className="px-3 py-1 text-[#d4d4d4] border-r border-[#3e3e42] max-w-[240px] truncate"
+                            className="px-3 py-1 text-[#d4d4d4] border-r border-[#2a2a2a] max-w-[240px] truncate"
                             title={row[col]}>
                             {row[col] === '' || row[col] == null
-                              ? <span className="text-[#5a5a5a] italic">null</span>
+                              ? <span className="text-[#3a3a3a] italic">null</span>
                               : row[col]}
                           </td>
                         ))}
@@ -375,7 +425,7 @@ export default function OutputPanel({
                 </table>
               )}
               {!previewLoading && !previewError && !previewResult && (
-                <div className="flex items-center justify-center h-full text-[#5a5a5a] text-xs italic">
+                <div className="flex items-center justify-center h-full text-[#3a3a3a] text-xs italic">
                   Open a .sql model and click "Preview Data" to query Athena.
                 </div>
               )}
@@ -385,4 +435,6 @@ export default function OutputPanel({
       )}
     </div>
   );
-}
+});
+
+export default OutputPanel;

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'DBT Studio',
+  title: 'DBT DataArch Studio',
   description: 'dbt model editor with AI assistant — Cursor-like IDE for dbt',
 };
 

@@ -10,8 +10,21 @@ import {
   FileCode,
   Loader2,
   Sparkles,
+  ChevronDown,
+  ChevronRight,
+  Table2,
+  RefreshCw,
+  Database,
 } from 'lucide-react';
 import type { ChatMessage } from '@/types';
+
+// ── Index status ─────────────────────────────────────────────────────────────
+
+interface IndexStatus {
+  exists: boolean;
+  chunkCount: number;
+  createdAt: string | null;
+}
 
 interface Props {
   messages: ChatMessage[];
@@ -66,6 +79,42 @@ function CodeBlock({
   );
 }
 
+function SchemaChunksPanel({ chunks }: { chunks: string[] }) {
+  const [open, setOpen] = useState(false);
+  if (!chunks || chunks.length === 0) return null;
+  return (
+    <div className="mt-2 border border-[#3e3e42] rounded overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 w-full px-3 py-1.5 bg-[#2d2d2d] text-[10px] text-[#8b8b8b] hover:text-[#d4d4d4] hover:bg-[#333] transition-colors"
+      >
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        <Table2 size={11} />
+        Retrieved schema ({chunks.length} table{chunks.length > 1 ? 's' : ''})
+      </button>
+      {open && (
+        <div className="divide-y divide-[#3e3e42]">
+          {chunks.map((chunk, i) => (
+            <pre
+              key={i}
+              className="p-2 text-[10px] font-mono text-[#8b8b8b] bg-[#1a1a1a] whitespace-pre-wrap overflow-x-auto leading-relaxed"
+            >
+              {chunk}
+            </pre>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModeBadge({ mode }: { mode?: string }) {
+  if (!mode || mode === 'authoring' || mode === 'error') return null;
+  const label = mode === 'sql' ? '⚡ SQL mode' : mode === 'filesystem' ? '📁 file search' : mode;
+  const color = mode === 'sql' ? 'text-[#4ec9b0]' : 'text-[#dcb67a]';
+  return <span className={`text-[9px] font-mono ${color} ml-1`}>{label}</span>;
+}
+
 function MessageContent({
   content,
   onInsert,
@@ -104,11 +153,12 @@ function MessageContent({
 }
 
 const SUGGESTIONS = [
+  'How many live sessions happened last week?',
+  'Show top 10 users by session count this month',
+  'What are the unique session types in the mart?',
+  'List all cohorts and how many pathways they are in',
   'Create a staging model for raw_session',
-  'Write a source YAML for a new database schema',
   'Add unique + not_null tests to f_score model',
-  'Explain what ref() vs source() does in dbt',
-  'Generate an incremental model for events data',
 ];
 
 export default function ChatPanel({
@@ -120,12 +170,74 @@ export default function ChatPanel({
 }: Props) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshLog, setRefreshLog] = useState<string[]>([]);
+  const [showRefreshLog, setShowRefreshLog] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load index status on mount
+  useEffect(() => {
+    fetch('/api/schema-refresh')
+      .then(r => r.json())
+      .then((s: IndexStatus) => setIndexStatus(s))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  const refreshSchema = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshLog([]);
+    setShowRefreshLog(true);
+
+    try {
+      const res = await fetch('/api/schema-refresh', { method: 'POST' });
+      if (!res.body) throw new Error('No stream body');
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const ev = JSON.parse(line.slice(6));
+            const msg =
+              ev.step === 'done'
+                ? `✅ ${ev.message}`
+                : ev.step === 'error'
+                  ? `❌ ${ev.message}`
+                  : ev.done != null
+                    ? `${ev.step} (${ev.done}/${ev.total})`
+                    : ev.step;
+            setRefreshLog(l => [...l, msg]);
+            if (ev.step === 'done') {
+              setIndexStatus({
+                exists: true,
+                chunkCount: ev.chunkCount,
+                createdAt: ev.createdAt,
+              });
+            }
+          } catch { /* skip malformed event */ }
+        }
+      }
+    } catch (err) {
+      setRefreshLog(l => [...l, `❌ ${err instanceof Error ? err.message : 'Unknown error'}`]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing]);
 
   const adjustTextareaHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -168,6 +280,8 @@ export default function ChatPanel({
           role: 'assistant',
           content: data.message,
           sources: data.sources,
+          schemaChunks: data.schemaChunks ?? [],
+          mode: data.mode,
           timestamp: new Date(),
         },
       ]);
@@ -193,24 +307,82 @@ export default function ChatPanel({
         <span className="text-[10px] font-semibold text-[#bdbdbd] uppercase tracking-widest">
           DBT Assistant
         </span>
-        {activeFilePath && (
-          <span
-            className="ml-auto text-[10px] text-[#8b8b8b] truncate max-w-[140px]"
-            title={activeFilePath}
-          >
-            {activeFilePath.split('/').pop()}
-          </span>
-        )}
-        {messages.length > 0 && (
+
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {/* Schema index status pill */}
+          {indexStatus && (
+            <button
+              onClick={() => setShowRefreshLog(v => !v)}
+              className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full border transition-colors"
+              style={
+                indexStatus.exists
+                  ? { borderColor: '#4ec9b0', color: '#4ec9b0' }
+                  : { borderColor: '#ce9178', color: '#ce9178' }
+              }
+              title={
+                indexStatus.exists
+                  ? `${indexStatus.chunkCount} tables indexed · ${new Date(indexStatus.createdAt!).toLocaleString()}`
+                  : 'Schema not indexed — click Refresh'
+              }
+            >
+              <Database size={9} />
+              {indexStatus.exists ? `${indexStatus.chunkCount} tables` : 'Not indexed'}
+            </button>
+          )}
+
+          {/* Refresh Schema button */}
           <button
-            onClick={() => onMessagesChange([])}
-            className="text-[10px] text-[#5a5a5a] hover:text-[#8b8b8b] ml-1 shrink-0"
-            title="Clear chat"
+            onClick={refreshSchema}
+            disabled={refreshing}
+            className="flex items-center gap-1 text-[10px] text-[#8b8b8b] hover:text-[#d4d4d4] disabled:opacity-40 transition-colors"
+            title="Re-embed schema from catalog.json"
           >
-            Clear
+            <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Indexing…' : 'Refresh Schema'}
           </button>
-        )}
+
+          {activeFilePath && (
+            <span
+              className="text-[10px] text-[#8b8b8b] truncate max-w-[120px]"
+              title={activeFilePath}
+            >
+              {activeFilePath.split('/').pop()}
+            </span>
+          )}
+
+          {messages.length > 0 && (
+            <button
+              onClick={() => onMessagesChange([])}
+              className="text-[10px] text-[#5a5a5a] hover:text-[#8b8b8b]"
+              title="Clear chat"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Refresh log panel */}
+      {showRefreshLog && refreshLog.length > 0 && (
+        <div className="border-b border-[#3e3e42] bg-[#1e1e1e] px-3 py-2 max-h-32 overflow-y-auto shrink-0">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[9px] text-[#8b8b8b] font-mono uppercase tracking-widest">
+              Schema indexing log
+            </span>
+            <button
+              onClick={() => setShowRefreshLog(false)}
+              className="text-[9px] text-[#5a5a5a] hover:text-[#8b8b8b]"
+            >
+              Hide
+            </button>
+          </div>
+          {refreshLog.map((line, i) => (
+            <p key={i} className="text-[10px] font-mono text-[#8b8b8b] leading-snug">
+              {line}
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4 min-h-0 select-text">
@@ -259,20 +431,25 @@ export default function ChatPanel({
               ) : (
                 <div className="bg-[#2d2d2d] rounded-lg p-3 border border-[#3e3e42]">
                   <MessageContent content={msg.content} onInsert={onInsertCode} />
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-[#3e3e42]">
-                      <p className="text-[10px] text-[#5a5a5a] mb-1.5">Context from:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {msg.sources.map((s) => (
-                          <span
-                            key={s}
-                            className="text-[10px] bg-[#1e1e1e] text-[#569cd6] px-1.5 py-0.5 rounded border border-[#3e3e42]"
-                            title={s}
-                          >
-                            {s.split('/').pop()}
-                          </span>
-                        ))}
-                      </div>
+
+                  {/* Schema chunks (SQL mode) */}
+                  {msg.schemaChunks && msg.schemaChunks.length > 0 && (
+                    <SchemaChunksPanel chunks={msg.schemaChunks} />
+                  )}
+
+                  {/* Sources / mode badge */}
+                  {(msg.sources && msg.sources.length > 0 || msg.mode) && (
+                    <div className="mt-2 pt-2 border-t border-[#3e3e42] flex flex-wrap items-center gap-1">
+                      <ModeBadge mode={msg.mode} />
+                      {msg.sources && msg.sources.map((s) => (
+                        <span
+                          key={s}
+                          className="text-[10px] bg-[#1e1e1e] text-[#569cd6] px-1.5 py-0.5 rounded border border-[#3e3e42]"
+                          title={s}
+                        >
+                          {s.split('/').pop()}
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>

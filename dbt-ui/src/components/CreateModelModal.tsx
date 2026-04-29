@@ -1,51 +1,94 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Sparkles, Loader2, RefreshCw } from 'lucide-react';
+import { X, Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
   onCreated: (path: string) => void;
 }
 
-const MATERIALIZATIONS = ['table', 'view', 'incremental', 'ephemeral'];
+// ── Config options ────────────────────────────────────────────────────────
 
-// Suggest a default materialization based on folder naming conventions
-function defaultMaterialization(folderPath: string): string {
+const MATERIALIZATIONS = ['table', 'view', 'incremental', 'ephemeral'];
+const FORMATS = ['parquet', 'orc', 'avro', 'json', 'textfile'];
+const COMPRESSIONS = ['snappy', 'gzip', 'zstd', 'lz4', 'none'];
+const TABLE_TYPES = ['iceberg', 'hive'];
+
+interface ModelConfig {
+  materialized: string;
+  table_type: string;
+  format: string;
+  write_compression: string;
+  persist_docs_relation: boolean;
+  persist_docs_columns: boolean;
+  owner: string;
+  pii: boolean;
+}
+
+const DEFAULT_CONFIG: ModelConfig = {
+  materialized: 'table',
+  table_type: 'iceberg',
+  format: 'parquet',
+  write_compression: 'snappy',
+  persist_docs_relation: true,
+  persist_docs_columns: true,
+  owner: 'analytics',
+  pii: false,
+};
+
+function suggestConfig(folderPath: string): Partial<ModelConfig> {
   const name = folderPath.split('/').pop() ?? '';
-  if (name === 'staging' || name === 'intermediate') return 'view';
-  return 'table';
+  if (name === 'staging' || name === 'intermediate') {
+    return { materialized: 'view' };
+  }
+  return { materialized: 'table' };
+}
+
+// ── YAML / SQL generators ─────────────────────────────────────────────────
+
+function generateConfigBlock(cfg: ModelConfig, isSameFolder: boolean): string {
+  const indent = '    ';
+  const lines = [
+    `{{ config(`,
+    `${indent}materialized = '${cfg.materialized}',`,
+  ];
+  if (cfg.materialized !== 'view' && cfg.materialized !== 'ephemeral') {
+    lines.push(`${indent}table_type = '${cfg.table_type}',`);
+    lines.push(`${indent}format = '${cfg.format}',`);
+    lines.push(`${indent}write_compression = '${cfg.write_compression}',`);
+  }
+  lines.push(
+    `${indent}persist_docs = { "relation": ${cfg.persist_docs_relation}, "columns": ${cfg.persist_docs_columns} },`
+  );
+  lines.push(`${indent}meta = {`);
+  lines.push(`${indent}    "owner": "${cfg.owner}",`);
+  lines.push(`${indent}    "pii": ${cfg.pii}`);
+  lines.push(`${indent}}`);
+  lines.push(`) }}`);
+  return lines.join('\n');
 }
 
 function generateModelSQL(
   name: string,
-  materialization: string,
+  cfg: ModelConfig,
   refs: string[],
   sourceRef: string
 ): string {
   const validRefs = refs.filter((r) => r.trim());
   const [srcName, srcTable] = sourceRef ? sourceRef.split('.') : [];
-
-  const configBlock = `{{ config(
-    materialized='${materialization}',
-    table_type='iceberg',
-    format='parquet'
-) }}
-
-`;
+  const configBlock = generateConfigBlock(cfg, false);
 
   if (validRefs.length > 0) {
     const ctes = validRefs
       .map((r) => `${r.trim()} as (\n    select * from {{ ref('${r.trim()}') }}\n)`)
       .join(',\n\n');
-    return `${configBlock}with\n${ctes}\n\nselect\n    *\nfrom ${validRefs[0].trim()}\n`;
+    return `${configBlock}\n\nwith\n${ctes}\n\nselect\n    *\nfrom ${validRefs[0].trim()}\n`;
   }
-
   if (srcName && srcTable) {
-    return `${configBlock}select\n    *\nfrom {{ source('${srcName.trim()}', '${srcTable.trim()}') }}\n`;
+    return `${configBlock}\n\nselect\n    *\nfrom {{ source('${srcName.trim()}', '${srcTable.trim()}') }}\n`;
   }
-
-  return `${configBlock}select\n    -- TODO: add your columns\n    *\nfrom {{ source('source_name', 'table_name') }}\n`;
+  return `${configBlock}\n\nselect\n    -- TODO: add your columns\n    *\nfrom {{ source('source_name', 'table_name') }}\n`;
 }
 
 function generateSchemaEntry(modelName: string): string {
@@ -61,6 +104,8 @@ function generateSchemaEntry(modelName: string): string {
   );
 }
 
+// ── FileNode ───────────────────────────────────────────────────────────────
+
 interface FileNode {
   name: string;
   type: 'file' | 'directory';
@@ -68,18 +113,53 @@ interface FileNode {
   children?: FileNode[];
 }
 
+// ── Select helper ─────────────────────────────────────────────────────────
+
+function Sel({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-[10px] text-[#8b8b8b] mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-2 py-1.5 text-xs text-[#d4d4d4] outline-none"
+      >
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// ── Main modal ────────────────────────────────────────────────────────────
+
+type FolderMode = 'existing' | 'new';
+
 export default function CreateModelModal({ onClose, onCreated }: Props) {
-  // ── Form state ────────────────────────────────────────────────────────────
+
+  // ── Core state ────────────────────────────────────────────────────────
   const [name, setName] = useState('');
+  const [folderMode, setFolderMode] = useState<FolderMode>('existing');
   const [folder, setFolder] = useState('');
-  const [materialization, setMaterialization] = useState('table');
+  const [newFolderPath, setNewFolderPath] = useState('models/');
   const [refs, setRefs] = useState('');
   const [sourceRef, setSourceRef] = useState('');
   const [addToSchema, setAddToSchema] = useState(true);
+  const [showConfig, setShowConfig] = useState(false);
+  const [cfg, setCfg] = useState<ModelConfig>({ ...DEFAULT_CONFIG });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // ── Dynamic folder list ───────────────────────────────────────────────────
+  // ── Dynamic folder list ───────────────────────────────────────────────
   const [folders, setFolders] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(true);
 
@@ -91,34 +171,33 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
       const modelsNode = tree.children?.find((c) => c.name === 'models');
       const dirs = (modelsNode?.children ?? [])
         .filter((c) => c.type === 'directory')
-        .map((c) => c.path); // e.g. "models/marts"
-
+        .map((c) => c.path);
       setFolders(dirs);
-
-      // Set initial selection to first available folder
       if (dirs.length > 0 && !folder) {
         setFolder(dirs[0]);
-        setMaterialization(defaultMaterialization(dirs[0]));
+        setCfg((prev) => ({ ...prev, ...suggestConfig(dirs[0]) }));
       }
-    } catch {
-      // ignore — user can still type a custom path
-    } finally {
-      setLoadingFolders(false);
-    }
+    } catch { /* ignore */ }
+    finally { setLoadingFolders(false); }
   };
 
-  useEffect(() => {
-    fetchFolders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { fetchFolders(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const handleFolderChange = (f: string) => {
     setFolder(f);
-    setMaterialization(defaultMaterialization(f));
+    setCfg((prev) => ({ ...prev, ...suggestConfig(f) }));
     setGeneratedSQL('');
   };
 
-  // ── AI generation state ───────────────────────────────────────────────────
+  const activeFolder = folderMode === 'existing' ? folder : newFolderPath.trim();
+
+  // ── Config helpers ────────────────────────────────────────────────────
+  const setField = <K extends keyof ModelConfig>(k: K, v: ModelConfig[K]) =>
+    setCfg((prev) => ({ ...prev, [k]: v }));
+
+  const needsStorageConfig = cfg.materialized !== 'view' && cfg.materialized !== 'ephemeral';
+
+  // ── AI generation ─────────────────────────────────────────────────────
   const [generatedSQL, setGeneratedSQL] = useState('');
   const [generating, setGenerating] = useState(false);
 
@@ -126,140 +205,91 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
     if (!name.trim()) return 'Model name is required';
     if (!/^[a-z_][a-z0-9_]*$/.test(name.trim()))
       return 'Name must use only lowercase letters, numbers, and underscores';
-    if (!folder.trim()) return 'Please select a folder';
+    if (!activeFolder.trim()) return 'Folder path is required';
     return '';
   };
 
   const generateWithAI = async () => {
     const err = validate();
     if (err) { setError(err); return; }
-
     setGenerating(true);
     setError('');
     setGeneratedSQL('');
-
     const refsArray = refs.split(',').map((r) => r.trim()).filter(Boolean);
     const [srcName, srcTable] = sourceRef ? sourceRef.split('.') : [];
-
     const prompt = [
       `Generate a complete dbt SQL model named "${name.trim()}" for the mursion_dbt_athena project.`,
-      `Folder: ${folder}`,
-      `Materialization: ${materialization} with table_type='iceberg', format='parquet' (AWS Athena).`,
-      refsArray.length > 0
-        ? `Upstream refs: ${refsArray.join(', ')} (use {{ ref('...') }}).`
-        : '',
-      srcName && srcTable
-        ? `Upstream source: {{ source('${srcName.trim()}', '${srcTable.trim()}') }}.`
-        : '',
+      `Folder: ${activeFolder}`,
+      `Materialization: ${cfg.materialized}${needsStorageConfig ? `, table_type='${cfg.table_type}', format='${cfg.format}', write_compression='${cfg.write_compression}'` : ''} (AWS Athena).`,
+      refsArray.length > 0 ? `Upstream refs: ${refsArray.join(', ')} (use {{ ref('...') }}).` : '',
+      srcName && srcTable ? `Upstream source: {{ source('${srcName.trim()}', '${srcTable.trim()}') }}.` : '',
       `Include: config block at top, WITH clause CTEs for each ref, and a well-structured SELECT.`,
       `Follow naming: f_ fact · d_ dimension · m_ mapping · stg_ staging.`,
       `Return ONLY the SQL code block, no explanation.`,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
+    ].filter(Boolean).join('\n');
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: prompt }],
-          activeFilePath: null,
-          activeFileContent: null,
-        }),
+        body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], activeFilePath: null, activeFileContent: null }),
       });
       const data = await res.json();
       const sqlMatch = data.message.match(/```sql\n([\s\S]+?)```/);
-      if (sqlMatch) {
-        setGeneratedSQL(sqlMatch[1].trim());
-      } else if (data.message.includes('{{ config(')) {
-        setGeneratedSQL(data.message.trim());
-      } else {
-        setError(
-          data.message.startsWith('⚠️')
-            ? data.message
-            : 'AI did not return valid SQL. Try adding refs or a source reference.'
-        );
-      }
-    } catch {
-      setError('AI generation failed. Check OPENAI_API_KEY in .env.local.');
-    } finally {
-      setGenerating(false);
-    }
+      if (sqlMatch) setGeneratedSQL(sqlMatch[1].trim());
+      else if (data.message.includes('{{ config(')) setGeneratedSQL(data.message.trim());
+      else setError(data.message.startsWith('⚠️') ? data.message : 'AI did not return valid SQL. Try adding refs or a source.');
+    } catch { setError('AI generation failed. Check OPENAI_API_KEY in .env.local.'); }
+    finally { setGenerating(false); }
   };
 
   const handleCreate = async () => {
     const err = validate();
     if (err) { setError(err); return; }
-
     setLoading(true);
     setError('');
-
     const modelName = name.trim();
-    const sqlPath = `${folder}/${modelName}.sql`;
+    const sqlPath = `${activeFolder}/${modelName}.sql`;
     const refsArray = refs.split(',').map((r) => r.trim()).filter(Boolean);
-    const sqlContent =
-      generatedSQL || generateModelSQL(modelName, materialization, refsArray, sourceRef);
-
+    const sqlContent = generatedSQL || generateModelSQL(modelName, cfg, refsArray, sourceRef);
     try {
       const res = await fetch('/api/file', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: sqlPath, content: sqlContent }),
       });
-
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Failed to create model');
       }
-
       if (addToSchema) {
-        const schemaPath = `${folder}/schema.yml`;
+        const schemaPath = `${activeFolder}/schema.yml`;
         const getRes = await fetch(`/api/file?path=${encodeURIComponent(schemaPath)}`);
         if (getRes.ok) {
           const { content } = await getRes.json();
-          await fetch('/api/file', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              path: schemaPath,
-              content: content.trimEnd() + generateSchemaEntry(modelName) + '\n',
-            }),
-          });
+          await fetch('/api/file', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: schemaPath, content: content.trimEnd() + generateSchemaEntry(modelName) + '\n' }) });
         } else {
-          await fetch('/api/file', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              path: schemaPath,
-              content: `version: 2\n\nmodels:${generateSchemaEntry(modelName)}\n`,
-            }),
-          });
+          await fetch('/api/file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: schemaPath, content: `version: 2\n\nmodels:${generateSchemaEntry(modelName)}\n` }) });
         }
       }
-
       onCreated(sqlPath);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-[#252526] border border-[#3e3e42] rounded-lg w-[520px] max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-[#252526] border border-[#3e3e42] rounded-lg w-[600px] max-h-[90vh] overflow-y-auto shadow-2xl">
+
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#3e3e42] sticky top-0 bg-[#252526] z-10">
           <h2 className="text-sm font-semibold text-[#d4d4d4]">Create New Model</h2>
-          <button onClick={onClose} className="text-[#8b8b8b] hover:text-[#d4d4d4] transition-colors">
-            <X size={16} />
-          </button>
+          <button onClick={onClose} className="text-[#8b8b8b] hover:text-[#d4d4d4] transition-colors"><X size={16} /></button>
         </div>
 
-        {/* Body */}
         <div className="p-4 space-y-4">
-          {/* Name */}
+
+          {/* Model name */}
           <div>
             <label className="block text-xs text-[#8b8b8b] mb-1.5">
               Model Name <span className="text-red-400">*</span>
@@ -272,107 +302,182 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
               placeholder="e.g. f_sessions_daily"
               className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none transition-colors"
             />
-            <p className="text-[10px] text-[#5a5a5a] mt-1">
-              f_ fact · d_ dimension · m_ mapping · stg_ staging
-            </p>
+            <p className="text-[10px] text-[#5a5a5a] mt-1">f_ fact · d_ dimension · m_ mapping · stg_ staging</p>
           </div>
 
-          {/* Folder + Materialization */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs text-[#8b8b8b]">
-                  Folder <span className="text-red-400">*</span>
-                </label>
+          {/* ── Folder strategy toggle ── */}
+          <div>
+            <label className="block text-xs text-[#8b8b8b] mb-2">Folder</label>
+            <div className="flex gap-2 mb-2">
+              {([
+                { id: 'existing', label: 'Existing folder', hint: 'Add to a folder already in the project' },
+                { id: 'new', label: 'New folder', hint: 'Create a new subfolder under models/' },
+              ] as { id: FolderMode; label: string; hint: string }[]).map(({ id, label, hint }) => (
                 <button
-                  onClick={fetchFolders}
-                  title="Refresh folders from project"
-                  className="text-[#5a5a5a] hover:text-[#8b8b8b] transition-colors"
+                  key={id}
+                  onClick={() => setFolderMode(id)}
+                  className={`flex-1 px-3 py-2 rounded border text-left transition-colors ${
+                    folderMode === id
+                      ? 'border-[#007acc] bg-[#007acc]/10 text-[#569cd6]'
+                      : 'border-[#3e3e42] bg-[#1e1e1e] text-[#8b8b8b] hover:border-[#5a5a5a]'
+                  }`}
                 >
+                  <div className="text-xs font-medium">{label}</div>
+                  <div className="text-[10px] mt-0.5 opacity-70">{hint}</div>
+                </button>
+              ))}
+            </div>
+
+            {folderMode === 'existing' ? (
+              <div className="flex items-center gap-2">
+                {loadingFolders ? (
+                  <div className="flex items-center gap-2 bg-[#3c3c3c] border border-[#5a5a5a] rounded px-3 py-2 h-9 flex-1">
+                    <Loader2 size={12} className="animate-spin text-[#8b8b8b]" />
+                    <span className="text-xs text-[#5a5a5a]">Loading…</span>
+                  </div>
+                ) : folders.length > 0 ? (
+                  <select
+                    value={folder}
+                    onChange={(e) => handleFolderChange(e.target.value)}
+                    className="flex-1 bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] outline-none"
+                  >
+                    {folders.map((f) => <option key={f} value={f}>{f.replace('models/', '')}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    value={folder}
+                    onChange={(e) => handleFolderChange(e.target.value)}
+                    placeholder="models/marts"
+                    className="flex-1 bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none"
+                  />
+                )}
+                <button onClick={fetchFolders} title="Refresh" className="text-[#5a5a5a] hover:text-[#8b8b8b] transition-colors">
                   <RefreshCw size={11} className={loadingFolders ? 'animate-spin' : ''} />
                 </button>
               </div>
-              {loadingFolders ? (
-                <div className="flex items-center gap-2 bg-[#3c3c3c] border border-[#5a5a5a] rounded px-3 py-2 h-9">
-                  <Loader2 size={12} className="animate-spin text-[#8b8b8b]" />
-                  <span className="text-xs text-[#5a5a5a]">Loading…</span>
-                </div>
-              ) : folders.length > 0 ? (
-                <select
-                  value={folder}
-                  onChange={(e) => handleFolderChange(e.target.value)}
-                  className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] outline-none"
-                >
-                  {folders.map((f) => (
-                    <option key={f} value={f}>
-                      {f.replace('models/', '')}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  value={folder}
-                  onChange={(e) => handleFolderChange(e.target.value)}
-                  placeholder="models/marts"
-                  className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none transition-colors"
-                />
-              )}
-            </div>
+            ) : (
+              <input
+                value={newFolderPath}
+                onChange={(e) => { setNewFolderPath(e.target.value); setGeneratedSQL(''); }}
+                placeholder="models/warehouse"
+                className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none"
+              />
+            )}
+          </div>
 
-            <div>
-              <label className="block text-xs text-[#8b8b8b] mb-1.5">Materialization</label>
-              <select
-                value={materialization}
-                onChange={(e) => { setMaterialization(e.target.value); setGeneratedSQL(''); }}
-                className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] outline-none"
-              >
-                {MATERIALIZATIONS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
+          {/* ── dbt Config (collapsible) ── */}
+          <div className="border border-[#3e3e42] rounded overflow-hidden">
+            <button
+              onClick={() => setShowConfig((v) => !v)}
+              className="flex items-center justify-between w-full px-3 py-2 bg-[#1e1e1e] hover:bg-[#2d2d2d] transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                {showConfig ? <ChevronDown size={12} className="text-[#8b8b8b]" /> : <ChevronRight size={12} className="text-[#8b8b8b]" />}
+                <span className="text-xs text-[#8b8b8b]">dbt Config</span>
+                <span className="text-[10px] font-mono text-[#5a5a5a]">
+                  {cfg.materialized} · {needsStorageConfig ? `${cfg.format}/${cfg.write_compression}` : 'no storage config'}
+                </span>
+              </div>
+              <span className="text-[10px] text-[#5a5a5a]">{showConfig ? 'collapse' : 'expand'}</span>
+            </button>
+
+            {showConfig && (
+              <div className="p-3 bg-[#1e1e1e] border-t border-[#3e3e42] space-y-3">
+
+                {/* Row 1: materialized + table_type */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Sel label="materialized" value={cfg.materialized}
+                    options={MATERIALIZATIONS}
+                    onChange={(v) => { setField('materialized', v); setGeneratedSQL(''); }} />
+                  <Sel label="table_type" value={cfg.table_type}
+                    options={TABLE_TYPES}
+                    onChange={(v) => setField('table_type', v)}  />
+                </div>
+
+                {/* Row 2: format + write_compression (only when relevant) */}
+                {needsStorageConfig && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Sel label="format" value={cfg.format} options={FORMATS} onChange={(v) => setField('format', v)} />
+                    <Sel label="write_compression" value={cfg.write_compression} options={COMPRESSIONS} onChange={(v) => setField('write_compression', v)} />
+                  </div>
+                )}
+
+                {/* Row 3: persist_docs */}
+                <div>
+                  <p className="text-[10px] text-[#8b8b8b] mb-1.5">persist_docs</p>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#8b8b8b]">
+                      <input type="checkbox" checked={cfg.persist_docs_relation}
+                        onChange={(e) => setField('persist_docs_relation', e.target.checked)}
+                        className="accent-[#007acc] w-3 h-3" />
+                      relation
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#8b8b8b]">
+                      <input type="checkbox" checked={cfg.persist_docs_columns}
+                        onChange={(e) => setField('persist_docs_columns', e.target.checked)}
+                        className="accent-[#007acc] w-3 h-3" />
+                      columns
+                    </label>
+                  </div>
+                </div>
+
+                {/* Row 4: meta */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-[#8b8b8b] mb-1">meta.owner</label>
+                    <input value={cfg.owner} onChange={(e) => setField('owner', e.target.value)}
+                      placeholder="analytics"
+                      className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-2 py-1.5 text-xs text-[#d4d4d4] placeholder-[#5a5a5a] outline-none" />
+                  </div>
+                  <div className="flex items-end pb-1.5">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#8b8b8b]">
+                      <input type="checkbox" checked={cfg.pii}
+                        onChange={(e) => setField('pii', e.target.checked)}
+                        className="accent-[#007acc] w-3 h-3" />
+                      meta.pii
+                    </label>
+                  </div>
+                </div>
+
+                {/* Live preview of config block */}
+                <div>
+                  <p className="text-[10px] text-[#5a5a5a] mb-1">Generated config block preview</p>
+                  <pre className="text-[10px] font-mono text-[#8b8b8b] bg-[#111] rounded p-2 overflow-x-auto leading-relaxed">
+                    {generateConfigBlock(cfg, false)}
+                  </pre>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Refs */}
           <div>
             <label className="block text-xs text-[#8b8b8b] mb-1.5">
-              Upstream refs{' '}
-              <span className="text-[#5a5a5a]">(comma-separated model names)</span>
+              Upstream refs <span className="text-[#5a5a5a]">(comma-separated model names)</span>
             </label>
-            <input
-              value={refs}
-              onChange={(e) => { setRefs(e.target.value); setGeneratedSQL(''); }}
+            <input value={refs} onChange={(e) => { setRefs(e.target.value); setGeneratedSQL(''); }}
               placeholder="e.g. stg_sessions, d_users"
-              className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none transition-colors"
-            />
+              className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none transition-colors" />
           </div>
 
           {/* Source ref */}
           <div>
             <label className="block text-xs text-[#8b8b8b] mb-1.5">
-              Source reference{' '}
-              <span className="text-[#5a5a5a]">(source_name.table_name)</span>
+              Source reference <span className="text-[#5a5a5a]">(source_name.table_name)</span>
             </label>
-            <input
-              value={sourceRef}
-              onChange={(e) => { setSourceRef(e.target.value); setGeneratedSQL(''); }}
+            <input value={sourceRef} onChange={(e) => { setSourceRef(e.target.value); setGeneratedSQL(''); }}
               placeholder="e.g. application_db.raw_session"
-              className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none transition-colors"
-            />
+              className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none transition-colors" />
           </div>
 
           {/* Add to schema */}
           <label className="flex items-center gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={addToSchema}
-              onChange={(e) => setAddToSchema(e.target.checked)}
-              className="accent-[#007acc] w-3.5 h-3.5"
-            />
+            <input type="checkbox" checked={addToSchema} onChange={(e) => setAddToSchema(e.target.checked)}
+              className="accent-[#007acc] w-3.5 h-3.5" />
             <span className="text-xs text-[#8b8b8b]">Add entry to schema.yml</span>
           </label>
 
-          {/* AI-generated SQL preview */}
+          {/* AI SQL preview */}
           {generatedSQL && (
             <div className="rounded-md border border-[#3e3e42] overflow-hidden">
               <div className="flex items-center justify-between px-3 py-1.5 bg-[#2d2d2d]">
@@ -380,32 +485,21 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
                   <Sparkles size={12} className="text-[#007acc]" />
                   <span className="text-[10px] text-[#8b8b8b]">AI-generated SQL preview</span>
                 </div>
-                <button
-                  onClick={() => setGeneratedSQL('')}
-                  className="text-[10px] text-[#5a5a5a] hover:text-[#8b8b8b]"
-                >
-                  discard
-                </button>
+                <button onClick={() => setGeneratedSQL('')} className="text-[10px] text-[#5a5a5a] hover:text-[#8b8b8b]">discard</button>
               </div>
-              <textarea
-                readOnly
-                value={generatedSQL}
-                rows={10}
-                className="w-full bg-[#1a1a1a] text-xs text-[#d4d4d4] font-mono p-3 outline-none resize-none leading-relaxed"
-              />
+              <textarea readOnly value={generatedSQL} rows={10}
+                className="w-full bg-[#1a1a1a] text-xs text-[#d4d4d4] font-mono p-3 outline-none resize-none leading-relaxed" />
             </div>
           )}
 
           {error && (
-            <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded px-3 py-2">
-              {error}
-            </p>
+            <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded px-3 py-2">{error}</p>
           )}
 
           {/* Preview path */}
-          {name.trim() && folder && (
+          {name.trim() && activeFolder && (
             <p className="text-[10px] text-[#5a5a5a] font-mono bg-[#1e1e1e] rounded px-2 py-1">
-              → {folder}/{name.trim()}.sql
+              → {activeFolder}/{name.trim()}.sql
               {generatedSQL && <span className="ml-2 text-[#007acc]">✓ AI SQL ready</span>}
             </p>
           )}
@@ -413,28 +507,19 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
 
         {/* Footer */}
         <div className="flex justify-between gap-2 px-4 py-3 border-t border-[#3e3e42] sticky bottom-0 bg-[#252526]">
-          <button
-            onClick={generateWithAI}
-            disabled={generating || !name.trim()}
+          <button onClick={generateWithAI} disabled={generating || !name.trim()}
             title={!name.trim() ? 'Enter a model name first' : 'Generate SQL using project context'}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#007acc] text-[#007acc] hover:bg-[#007acc]/10 disabled:opacity-40 disabled:cursor-not-allowed rounded transition-colors"
-          >
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#007acc] text-[#007acc] hover:bg-[#007acc]/10 disabled:opacity-40 disabled:cursor-not-allowed rounded transition-colors">
             {generating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
             {generating ? 'Generating…' : generatedSQL ? 'Regenerate with AI' : 'Generate with AI'}
           </button>
-
           <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="px-3 py-1.5 text-xs text-[#8b8b8b] hover:text-[#d4d4d4] border border-[#5a5a5a] rounded hover:bg-[#3e3e42] transition-colors"
-            >
+            <button onClick={onClose}
+              className="px-3 py-1.5 text-xs text-[#8b8b8b] hover:text-[#d4d4d4] border border-[#5a5a5a] rounded hover:bg-[#3e3e42] transition-colors">
               Cancel
             </button>
-            <button
-              onClick={handleCreate}
-              disabled={loading}
-              className="px-4 py-1.5 text-xs bg-[#0e639c] hover:bg-[#1177bb] disabled:opacity-50 disabled:cursor-not-allowed rounded text-white font-medium transition-colors"
-            >
+            <button onClick={handleCreate} disabled={loading}
+              className="px-4 py-1.5 text-xs bg-[#0e639c] hover:bg-[#1177bb] disabled:opacity-50 disabled:cursor-not-allowed rounded text-white font-medium transition-colors">
               {loading ? 'Creating…' : generatedSQL ? 'Create with AI SQL' : 'Create Model'}
             </button>
           </div>

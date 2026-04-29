@@ -129,7 +129,11 @@ export default function EditorPane({
           <MonacoEditor
             key={activeFileTab.path}
             height="100%"
-            language={activeFileTab.language === 'yaml' ? 'yaml' : activeFileTab.language}
+            language={
+              activeFileTab.language === 'yaml' ? 'yaml'
+              : activeFileTab.language === 'csv' ? 'plaintext'
+              : activeFileTab.language
+            }
             value={activeFileTab.content}
             theme="vs-dark"
             onChange={(value) => {
