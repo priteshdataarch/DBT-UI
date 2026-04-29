@@ -3,95 +3,32 @@ import OpenAI from 'openai';
 import { retrieveContext } from '@/lib/rag';
 import { loadUserSystemAppend } from '@/lib/assistantUserInstructions';
 import { loadSchema, INTERMEDIATE_MODELS } from '@/lib/catalog';
+import { buildSqlPrompt, buildAuthoringPrompt } from '@/lib/prompts';
 
-// ── SQL mode system prompt ─────────────────────────────────────────────────
+// ── SQL mode system prompt — loaded from prompts/rag-sql-system.txt ──────────
 
-function buildSqlSystemPrompt(
+async function buildSqlSystemPrompt(
   schema: string,
   catalogAvailable: boolean,
   includeExplanation: boolean,
   flavor: 'live' | 'ondemand' | 'neutral'
-): string {
+): Promise<string> {
   const schemaSection = catalogAvailable
     ? `Relevant Database Schema (from dbt catalog — real Athena column types):\n${schema}`
     : `Relevant Schema (from manifest — column types may be incomplete):\n${schema}`;
 
   const outputRule = includeExplanation
-    ? '- Return SQL first, then a brief plain-English explanation (3–5 sentences max).'
-    : '- Return ONLY SQL in one ```sql``` block. No prose, no bullet points.';
+    ? 'Return SQL first, then a brief plain-English explanation (3–5 sentences max).'
+    : 'Return ONLY SQL in one ```sql``` block. No prose, no bullet points.';
 
-  const flavorFilter =
+  const flavorRule =
     flavor === 'live'
-      ? "- Add WHERE session_type = 'live' when filtering to live sessions."
+      ? "Add WHERE session_type = 'live' when filtering to live sessions."
       : flavor === 'ondemand'
-        ? "- Add WHERE session_type = 'ondemand' when filtering to ondemand sessions."
-        : '- Do NOT add any session_type filter unless the user explicitly asks for live or ondemand.';
+        ? "Add WHERE session_type = 'ondemand' when filtering to ondemand sessions."
+        : 'Do NOT add any session_type filter unless the user explicitly asks for live or ondemand.';
 
-  return `You are an expert SQL generator for Amazon Athena, grounded in this dbt project.
-
-════════════════════════════════════════
-QUERYABLE TABLES (prefer ONLY these 2)
-════════════════════════════════════════
-1. f_score               — default base table for almost all analytics
-2. f_team_sessions_final — fallback only if needed columns are missing in f_score
-
-PROHIBITED TABLES — NEVER reference these in any query:
-  f_live_skills, f_ondemand_skills, f_live_session, f_ondemand_session,
-  f_ondemand_session_event, f_session_score, f_skill_score,
-  f_session_insights_service, f_skill_domain_mapping, f_skill_domain_name
-  (These are internal staging tables. All their data is already merged into the mart tables above.)
-
-════════════════════════════════════════
-f_score — UNIFIED SKILL COLUMNS
-════════════════════════════════════════
-- skill          : unified skill name  (covers both live skill_name and ondemand skill)
-- skill_score    : unified skill score (covers both live skill_score and ondemand skill_score)
-- SessionScore   : unified session-level score
-- skill_id, domain, title, mindset_type, old_skill_name, event_number, attempt, CompetencyAttempt
-- Also inherits all session/user/client columns from f_team_sessions_final:
-  client_id, client_name, user_id, user_role, team_id, team_name,
-  scenario_id, scenario_name, project_id, project_name,
-  session_id, session_type, session_date, status, billable, sub_type,
-  start_date, end_date, actual_start_date, actual_end_date
-
-For ANY skill / performance / score query → use f_score.
-Do NOT split by live/ondemand unless user explicitly says so.
-Use f_team_sessions_final only when a required output/filter column is not present in f_score.
-
-════════════════════════════════════════
-f_team_sessions_final — SESSION METADATA
-════════════════════════════════════════
-Use when the query is about sessions, users, clients, teams — WITHOUT skill scores.
-Key columns: client_id, client_name, user_id, user_role, team_id, team_name,
-  scenario_id, scenario_name, customized_scenario_name, project_id, project_name,
-  session_id, session_type, session_date, status, billable, sub_type,
-  first_name, last_name, email, full_name, scenario_generation_type.
-
-════════════════════════════════════════
-QUERY RULES
-════════════════════════════════════════
-- Only use columns shown in the schema below. NEVER invent columns.
-- Prefer f_score as the primary table for analytics.
-- Use f_team_sessions_final only if required columns are missing from f_score.
-- Do NOT use f_sessions_final for final analytical output unless explicitly requested by user.
-- Only JOIN tables that share a documented key. Prefer single-table queries.
-- f_score already contains all session + skill data — never join f_score to f_team_sessions_final
-  unless you need a column from f_team_sessions_final that is NOT in f_score.
-- Use Athena SQL syntax. Keep queries concise; avoid unnecessary nested CTEs.
-- ${outputRule}
-- ${flavorFilter}
-- Do NOT wrap in \`{{ config(...) }}\` — this is a SELECT query, not a dbt model.
-- Prefer business-readable output fields: use *_name over *_id where available
-  (client_name, team_name, project_name, scenario_name, full_name).
-  Use IDs only if user explicitly asks for IDs or for joins/internal logic.
-
-Terminology (apply silently):
-- "pathways" = projects (project_name / project_id)
-- "cohorts"  = teams    (team_name / team_id)
-- "performing skills" → AVG(skill_score) or AVG(SessionScore) from f_score
-- "top N" queries → must end with ORDER BY ... DESC LIMIT N
-
-${schemaSection}`;
+  return buildSqlPrompt({ schemaSection, outputRule, flavorRule });
 }
 
 function detectQueryFlavor(question: string): 'live' | 'ondemand' | 'neutral' {
@@ -504,33 +441,24 @@ function validateSqlAgainstCatalog(
   return Array.from(new Set(errors));
 }
 
-// ── Authoring mode system prompt ───────────────────────────────────────────
+// ── Authoring mode system prompt — loaded from prompts/authoring-system.txt ──
 
-function buildAuthoringSystemPrompt(contextText: string, activeFilePath?: string, activeFileContent?: string): string {
-  return `You are a senior dbt SQL expert and data engineer for this repo.
-Help write dbt models, sources, YAML schemas, macros, and tests.
+async function buildAuthoringSystemPrompt(
+  contextText: string,
+  activeFilePath?: string,
+  activeFileContent?: string
+): Promise<string> {
+  const contextSection = contextText
+    ? `**Relevant model schemas from your project:**\n${contextText}`
+    : '';
+  const activeFileSection = activeFilePath
+    ? `**Currently open file:** \`${activeFilePath}\``
+    : '';
+  const activeContentSection = activeFileContent
+    ? `**Current file content:**\n\`\`\`sql\n${activeFileContent.slice(0, 2000)}\n\`\`\``
+    : '';
 
-**Project context:**
-- Project name: mursion_dbt_athena
-- Warehouse: AWS Athena with Iceberg tables (Parquet format)
-- Default config: \`{{ config(materialized='table', table_type='iceberg', format='parquet') }}\`
-
-**dbt conventions:**
-- \`{{ ref('model_name') }}\` to reference models · \`{{ source('source_name', 'table') }}\` for raw sources
-- Naming: \`f_\` facts · \`d_\` dimensions · \`m_\` mappings · \`stg_\` staging
-- Sources live in: \`models/sources/{source_name}/sources.yaml\`
-- NEVER invent column names — use only columns shown in the COLUMNS field below.
-
-${contextText ? `**Relevant model schemas from your project:**\n${contextText}` : ''}
-${activeFilePath ? `\n**Currently open file:** \`${activeFilePath}\`` : ''}
-${activeFileContent ? `\n**Current file content:**\n\`\`\`sql\n${activeFileContent.slice(0, 2000)}\n\`\`\`` : ''}
-
-When generating code:
-1. Wrap SQL in \`\`\`sql blocks, YAML in \`\`\`yaml blocks
-2. Use exact model names, source names, and column names from the context above
-3. Include the Iceberg/parquet config block for new model files
-4. Add a brief explanation before each code block
-5. Suggest unique + not_null tests when generating schema YAML`;
+  return buildAuthoringPrompt({ contextSection, activeFileSection, activeContentSection });
 }
 
 // ── Route handler ──────────────────────────────────────────────────────────
@@ -556,14 +484,14 @@ export async function POST(req: NextRequest) {
 
   let systemPrompt: string;
   if (mode === 'sql') {
-    systemPrompt = buildSqlSystemPrompt(
+    systemPrompt = await buildSqlSystemPrompt(
       contextText,
       catalogAvailable ?? true,
       includeExplanation,
       queryFlavor
     );
   } else {
-    systemPrompt = buildAuthoringSystemPrompt(contextText, activeFilePath, activeFileContent);
+    systemPrompt = await buildAuthoringSystemPrompt(contextText, activeFilePath, activeFileContent);
   }
 
   // Append optional user instructions (from .env or assistant-extra-instructions.md)

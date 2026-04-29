@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { DBT_ROOT } from '@/lib/fileSystem';
+import path from 'path';
+
+const DBT_ROOT = process.env.DBT_PROJECT_ROOT
+  ? path.resolve(process.env.DBT_PROJECT_ROOT)
+  : path.resolve(process.cwd(), '..');
 
 const exec = promisify(execFile);
 
@@ -100,6 +104,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'stage-files': {
         if (!files?.length) return NextResponse.json({ error: 'No files provided' }, { status: 400 });
         await run(['add', '--', ...files]);
+        return NextResponse.json({ ok: true });
+      }
+
+      case 'unstage-files': {
+        if (!files?.length) return NextResponse.json({ error: 'No files provided' }, { status: 400 });
+        await run(['reset', 'HEAD', '--', ...files]);
         return NextResponse.json({ ok: true });
       }
 

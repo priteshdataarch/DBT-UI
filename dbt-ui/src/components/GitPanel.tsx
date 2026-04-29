@@ -190,6 +190,7 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
         const msgs: Record<string, string> = {
           'stage-all': 'All changes staged',
           'unstage-all': 'All changes unstaged',
+          'unstage-files': 'File unstaged',
           commit: 'Committed successfully',
           push: 'Pushed to remote',
           'commit-push': 'Committed and pushed',
@@ -207,7 +208,7 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
   };
 
   const stageFile = (f: GitFileEntry) => act('stage-files', { files: [f.path] });
-  const unstageFile = (f: GitFileEntry) => act('stage-files', { action: 'unstage-all', files: [f.path] });
+  const unstageFile = (f: GitFileEntry) => act('unstage-files', { files: [f.path] });
   const discardFile = (f: GitFileEntry) => act('discard', { files: [f.path] });
 
   const totalChanges = status
