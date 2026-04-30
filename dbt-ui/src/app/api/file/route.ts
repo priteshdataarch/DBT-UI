@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile, writeFile, createFile, listDir } from '@/lib/fileSystem';
-import { commitAndPush } from '@/lib/git';
 
 export async function GET(req: NextRequest) {
   const listPath = req.nextUrl.searchParams.get('list');
@@ -30,8 +29,9 @@ export async function PUT(req: NextRequest) {
 
   try {
     await writeFile(filePath, content ?? '');
-    const git = await commitAndPush(filePath, 'update');
-    return NextResponse.json({ success: true, git });
+    // Intentionally no git add/commit here — models/seeds are edited via this API
+    // and must show up in Source Control for manual staging. Use GitPanel to commit.
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('File write error:', error);
     return NextResponse.json({ error: 'Failed to write file' }, { status: 500 });
@@ -44,8 +44,7 @@ export async function POST(req: NextRequest) {
 
   try {
     await createFile(filePath, content ?? '');
-    const git = await commitAndPush(filePath, 'add');
-    return NextResponse.json({ success: true, git });
+    return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to create file';
     return NextResponse.json({ error: message }, { status: 409 });

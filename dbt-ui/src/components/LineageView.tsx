@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   X, GitBranch, Loader2, AlertCircle, Database,
   Table2, ZoomIn, ZoomOut, Maximize2, RefreshCw,
+  ArrowUpToLine, ArrowDownToLine, Focus, LayoutTemplate,
 } from 'lucide-react';
 import type { LineageNode, LineageEdge } from '@/app/api/lineage/route';
+
+type DagMode = 'all' | 'upstream' | 'downstream' | 'focus';
 
 interface Props {
   /** If provided, that model is pre-highlighted when the graph opens */
@@ -70,6 +73,34 @@ function getPathIds(nodeId: string, edges: LineageEdge[]): Set<string> {
   return ids;
 }
 
+// ── DAG filter helpers ─────────────────────────────────────────────────────
+function getUpstreamIds(nodeId: string, edges: LineageEdge[]): Set<string> {
+  const ids = new Set([nodeId]);
+  const walk = (id: string) => edges.forEach(e => {
+    if (e.target === id && !ids.has(e.source)) { ids.add(e.source); walk(e.source); }
+  });
+  walk(nodeId);
+  return ids;
+}
+
+function getDownstreamIds(nodeId: string, edges: LineageEdge[]): Set<string> {
+  const ids = new Set([nodeId]);
+  const walk = (id: string) => edges.forEach(e => {
+    if (e.source === id && !ids.has(e.target)) { ids.add(e.target); walk(e.target); }
+  });
+  walk(nodeId);
+  return ids;
+}
+
+function getNeighborIds(nodeId: string, edges: LineageEdge[]): Set<string> {
+  const ids = new Set([nodeId]);
+  edges.forEach(e => {
+    if (e.source === nodeId) ids.add(e.target);
+    if (e.target === nodeId) ids.add(e.source);
+  });
+  return ids;
+}
+
 // ── Colours ────────────────────────────────────────────────────────────────
 function nodeColors(node: LineageNode, highlight: 'focus' | 'path' | 'dim' | 'normal') {
   if (highlight === 'dim') return { fill: '#1a1a1a', stroke: '#2a2a2a', strokeW: 1, text: '#3a3a3a', accent: '#2a2a2a' };
@@ -117,6 +148,7 @@ export default function LineageView({ modelName, onClose, onOpenModel }: Props) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dagMode, setDagMode] = useState<DagMode>('all');
   const [vp, setVp] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [tooltip, setTooltip] = useState<{ text: string; cx: number; cy: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -198,13 +230,34 @@ export default function LineageView({ modelName, onClose, onOpenModel }: Props) 
   const onMU = (e: React.MouseEvent<SVGSVGElement>) => { dragRef.current = null; e.currentTarget.style.cursor = 'grab'; };
   const zoom = (d: number) => setVp(v => ({ ...v, scale: Math.max(0.08, Math.min(4, v.scale * d)) }));
 
+  // ── DAG filter: derive which nodes are visible ─────────────────────────────
+  const visibleNodeIds = useMemo<Set<string> | null>(() => {
+    if (!selectedId || dagMode === 'all') return null; // null = show all
+    if (dagMode === 'upstream')   return getUpstreamIds(selectedId, edges);
+    if (dagMode === 'downstream') return getDownstreamIds(selectedId, edges);
+    if (dagMode === 'focus')      return getNeighborIds(selectedId, edges);
+    return null;
+  }, [selectedId, dagMode, edges]);
+
+  // Re-fit when filter mode narrows/broadens the visible graph (must be after visibleNodeIds)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!loading) fitToScreen(); }, [visibleNodeIds]);
+
   // ── Layout + state ────────────────────────────────────────────────────────
-  const { positioned, svgW, svgH } = nodes.length > 0
-    ? computeLayout(nodes)
+  const visibleNodes = visibleNodeIds
+    ? nodes.filter(n => visibleNodeIds.has(n.id))
+    : nodes;
+
+  const visibleEdges = visibleNodeIds
+    ? edges.filter(e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target))
+    : edges;
+
+  const { positioned, svgW, svgH } = visibleNodes.length > 0
+    ? computeLayout(visibleNodes)
     : { positioned: [], svgW: 0, svgH: 0 };
 
   const posMap = new Map(positioned.map(n => [n.id, n]));
-  const pathIds = selectedId ? getPathIds(selectedId, edges) : null;
+  const pathIds = selectedId && dagMode === 'all' ? getPathIds(selectedId, edges) : null;
 
   const selectedNode = selectedId ? posMap.get(selectedId) : null;
 
@@ -220,7 +273,7 @@ export default function LineageView({ modelName, onClose, onOpenModel }: Props) 
             <span className="text-[#3e3e42] mx-1">·</span>
             <span className="text-xs font-mono text-[#4fc3f7]">{selectedNode.name}</span>
             <span className="text-[10px] text-[#5a5a5a] ml-1">path highlighted</span>
-            <button onClick={() => setSelectedId(null)}
+            <button onClick={() => { setSelectedId(null); setDagMode('all'); }}
               className="text-[10px] text-[#5a5a5a] hover:text-[#d4d4d4] underline ml-1">
               clear
             </button>
@@ -228,6 +281,32 @@ export default function LineageView({ modelName, onClose, onOpenModel }: Props) 
         )}
 
         <div className="ml-auto flex items-center gap-1">
+
+          {/* ── DAG filter mode pills ── */}
+          <div className="flex items-center bg-[#181818] rounded border border-[#2e2e2e] mr-2 shrink-0">
+            {([
+              { mode: 'all' as DagMode,        label: 'All',        icon: <LayoutTemplate size={9} />,    title: 'Show full graph' },
+              { mode: 'upstream' as DagMode,   label: 'Upstream',   icon: <ArrowUpToLine size={9} />,     title: 'Only ancestors of selected node' },
+              { mode: 'downstream' as DagMode, label: 'Downstream', icon: <ArrowDownToLine size={9} />,   title: 'Only descendants of selected node' },
+              { mode: 'focus' as DagMode,      label: 'Focus',      icon: <Focus size={9} />,             title: 'Selected + direct neighbours only' },
+            ] as const).map(({ mode, label, icon, title }) => (
+              <button
+                key={mode}
+                title={title}
+                onClick={() => setDagMode(mode)}
+                className={`flex items-center gap-1 px-2 py-0.5 text-[10px] transition-colors ${
+                  dagMode === mode
+                    ? 'bg-[#007acc] text-white rounded'
+                    : 'text-[#6a6a6a] hover:text-[#d4d4d4]'
+                } ${!selectedId && mode !== 'all' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                disabled={!selectedId && mode !== 'all'}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
+
           {/* Legend */}
           <div className="hidden sm:flex items-center gap-3 mr-3">
             {[
@@ -321,7 +400,7 @@ export default function LineageView({ modelName, onClose, onOpenModel }: Props) 
                   fill="none" stroke="#222" strokeWidth={1} rx={8} />
 
                 {/* Edges */}
-                {edges.map((e, i) => {
+                {visibleEdges.map((e, i) => {
                   const inPath = pathIds ? pathIds.has(e.source) && pathIds.has(e.target) : false;
                   const dim = pathIds !== null && !inPath;
                   return <Edge key={i} edge={e} posMap={posMap}
@@ -406,9 +485,18 @@ export default function LineageView({ modelName, onClose, onOpenModel }: Props) 
           {selectedNode && (
             <>
               <span className="text-[#2e2e2e]">·</span>
-              <span className="text-[10px] text-[#5a5a5a]">
-                <span className="text-[#569cd6]">{pathIds ? pathIds.size - 1 : 0}</span> nodes in <span className="font-mono text-[#4fc3f7]">{selectedNode.name}</span> path
-              </span>
+              {dagMode === 'all' && (
+                <span className="text-[10px] text-[#5a5a5a]">
+                  <span className="text-[#569cd6]">{pathIds ? pathIds.size - 1 : 0}</span> nodes in <span className="font-mono text-[#4fc3f7]">{selectedNode.name}</span> path
+                </span>
+              )}
+              {dagMode !== 'all' && visibleNodeIds && (
+                <span className="text-[10px] text-[#5a5a5a]">
+                  <span className="text-[#569cd6]">{visibleNodeIds.size}</span>{' '}
+                  {dagMode === 'upstream' ? 'upstream nodes' : dagMode === 'downstream' ? 'downstream nodes' : 'neighbours'} of{' '}
+                  <span className="font-mono text-[#4fc3f7]">{selectedNode.name}</span>
+                </span>
+              )}
             </>
           )}
           <span className="ml-auto text-[10px] text-[#3a3a3a]">

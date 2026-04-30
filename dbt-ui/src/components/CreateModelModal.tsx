@@ -16,14 +16,24 @@ const COMPRESSIONS = ['snappy', 'gzip', 'zstd', 'lz4', 'none'];
 const TABLE_TYPES = ['iceberg', 'hive'];
 
 interface ModelConfig {
-  materialized: string;
+  materialized: string;         // MANDATORY
+  // optional storage (table/incremental only)
   table_type: string;
   format: string;
   write_compression: string;
+  // optional docs
   persist_docs_relation: boolean;
   persist_docs_columns: boolean;
+  // optional meta
   owner: string;
   pii: boolean;
+}
+
+// Tracks which optional groups the user has enabled
+interface OptionalGroups {
+  storage: boolean;    // format / table_type / write_compression
+  persistDocs: boolean;
+  meta: boolean;
 }
 
 const DEFAULT_CONFIG: ModelConfig = {
@@ -47,24 +57,32 @@ function suggestConfig(folderPath: string): Partial<ModelConfig> {
 
 // ── YAML / SQL generators ─────────────────────────────────────────────────
 
-function generateConfigBlock(cfg: ModelConfig, isSameFolder: boolean): string {
+function generateConfigBlock(cfg: ModelConfig, _isSameFolder: boolean, groups: OptionalGroups): string {
   const indent = '    ';
+  const needsStorage = cfg.materialized !== 'view' && cfg.materialized !== 'ephemeral';
   const lines = [
     `{{ config(`,
     `${indent}materialized = '${cfg.materialized}',`,
   ];
-  if (cfg.materialized !== 'view' && cfg.materialized !== 'ephemeral') {
+  if (groups.storage && needsStorage) {
     lines.push(`${indent}table_type = '${cfg.table_type}',`);
     lines.push(`${indent}format = '${cfg.format}',`);
     lines.push(`${indent}write_compression = '${cfg.write_compression}',`);
   }
-  lines.push(
-    `${indent}persist_docs = { "relation": ${cfg.persist_docs_relation}, "columns": ${cfg.persist_docs_columns} },`
-  );
-  lines.push(`${indent}meta = {`);
-  lines.push(`${indent}    "owner": "${cfg.owner}",`);
-  lines.push(`${indent}    "pii": ${cfg.pii}`);
-  lines.push(`${indent}}`);
+  if (groups.persistDocs) {
+    lines.push(
+      `${indent}persist_docs = { "relation": ${cfg.persist_docs_relation}, "columns": ${cfg.persist_docs_columns} },`
+    );
+  }
+  if (groups.meta) {
+    lines.push(`${indent}meta = {`);
+    lines.push(`${indent}    "owner": "${cfg.owner}",`);
+    lines.push(`${indent}    "pii": ${cfg.pii}`);
+    lines.push(`${indent}},`);
+  }
+  // Remove trailing comma from last property line
+  const lastPropIdx = lines.length - 1;
+  lines[lastPropIdx] = lines[lastPropIdx].replace(/,\s*$/, '');
   lines.push(`) }}`);
   return lines.join('\n');
 }
@@ -72,12 +90,13 @@ function generateConfigBlock(cfg: ModelConfig, isSameFolder: boolean): string {
 function generateModelSQL(
   name: string,
   cfg: ModelConfig,
+  groups: OptionalGroups,
   refs: string[],
   sourceRef: string
 ): string {
   const validRefs = refs.filter((r) => r.trim());
   const [srcName, srcTable] = sourceRef ? sourceRef.split('.') : [];
-  const configBlock = generateConfigBlock(cfg, false);
+  const configBlock = generateConfigBlock(cfg, false, groups);
 
   if (validRefs.length > 0) {
     const ctes = validRefs
@@ -156,6 +175,14 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
   const [addToSchema, setAddToSchema] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
   const [cfg, setCfg] = useState<ModelConfig>({ ...DEFAULT_CONFIG });
+  // Which optional config groups are enabled (all off = use project defaults)
+  const [optGroups, setOptGroups] = useState<OptionalGroups>({
+    storage: false,
+    persistDocs: false,
+    meta: false,
+  });
+  const toggleGroup = (g: keyof OptionalGroups) =>
+    setOptGroups((prev) => ({ ...prev, [g]: !prev[g] }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -220,7 +247,7 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
     const prompt = [
       `Generate a complete dbt SQL model named "${name.trim()}" for the mursion_dbt_athena project.`,
       `Folder: ${activeFolder}`,
-      `Materialization: ${cfg.materialized}${needsStorageConfig ? `, table_type='${cfg.table_type}', format='${cfg.format}', write_compression='${cfg.write_compression}'` : ''} (AWS Athena).`,
+      `Materialization: ${cfg.materialized}${optGroups.storage && needsStorageConfig ? `, table_type='${cfg.table_type}', format='${cfg.format}', write_compression='${cfg.write_compression}'` : ''} (AWS Athena).`,
       refsArray.length > 0 ? `Upstream refs: ${refsArray.join(', ')} (use {{ ref('...') }}).` : '',
       srcName && srcTable ? `Upstream source: {{ source('${srcName.trim()}', '${srcTable.trim()}') }}.` : '',
       `Include: config block at top, WITH clause CTEs for each ref, and a well-structured SELECT.`,
@@ -250,7 +277,7 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
     const modelName = name.trim();
     const sqlPath = `${activeFolder}/${modelName}.sql`;
     const refsArray = refs.split(',').map((r) => r.trim()).filter(Boolean);
-    const sqlContent = generatedSQL || generateModelSQL(modelName, cfg, refsArray, sourceRef);
+    const sqlContent = generatedSQL || generateModelSQL(modelName, cfg, optGroups, refsArray, sourceRef);
     try {
       const res = await fetch('/api/file', {
         method: 'POST',
@@ -375,75 +402,129 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
                 {showConfig ? <ChevronDown size={12} className="text-[#8b8b8b]" /> : <ChevronRight size={12} className="text-[#8b8b8b]" />}
                 <span className="text-xs text-[#8b8b8b]">dbt Config</span>
                 <span className="text-[10px] font-mono text-[#5a5a5a]">
-                  {cfg.materialized} · {needsStorageConfig ? `${cfg.format}/${cfg.write_compression}` : 'no storage config'}
+                  {cfg.materialized}
+                  {optGroups.storage && needsStorageConfig ? ` · ${cfg.format}/${cfg.write_compression}` : ' · defaults'}
                 </span>
               </div>
               <span className="text-[10px] text-[#5a5a5a]">{showConfig ? 'collapse' : 'expand'}</span>
             </button>
 
             {showConfig && (
-              <div className="p-3 bg-[#1e1e1e] border-t border-[#3e3e42] space-y-3">
+              <div className="p-3 bg-[#1e1e1e] border-t border-[#3e3e42] space-y-4">
 
-                {/* Row 1: materialized + table_type */}
-                <div className="grid grid-cols-2 gap-3">
-                  <Sel label="materialized" value={cfg.materialized}
+                {/* Materialization — MANDATORY */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-[10px] text-[#f48771] font-semibold">REQUIRED</span>
+                    <span className="text-[10px] text-[#8b8b8b]">materialization</span>
+                  </div>
+                  <Sel label="" value={cfg.materialized}
                     options={MATERIALIZATIONS}
                     onChange={(v) => { setField('materialized', v); setGeneratedSQL(''); }} />
-                  <Sel label="table_type" value={cfg.table_type}
-                    options={TABLE_TYPES}
-                    onChange={(v) => setField('table_type', v)}  />
                 </div>
 
-                {/* Row 2: format + write_compression (only when relevant) */}
+                {/* Storage — OPTIONAL */}
                 {needsStorageConfig && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <Sel label="format" value={cfg.format} options={FORMATS} onChange={(v) => setField('format', v)} />
-                    <Sel label="write_compression" value={cfg.write_compression} options={COMPRESSIONS} onChange={(v) => setField('write_compression', v)} />
+                  <div className={`rounded border transition-colors ${optGroups.storage ? 'border-[#007acc]/40 bg-[#007acc]/5' : 'border-[#3e3e42]'}`}>
+                    <label className="flex items-center gap-2 px-3 py-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={optGroups.storage}
+                        onChange={() => toggleGroup('storage')}
+                        className="accent-[#007acc] w-3.5 h-3.5"
+                      />
+                      <span className="text-xs text-[#d4d4d4] font-medium">Storage config</span>
+                      <span className="text-[10px] text-[#5a5a5a] ml-auto">
+                        {optGroups.storage ? `${cfg.format} · ${cfg.write_compression} · ${cfg.table_type}` : 'use project defaults'}
+                      </span>
+                    </label>
+                    {optGroups.storage && (
+                      <div className="px-3 pb-3 space-y-2 border-t border-[#3e3e42]">
+                        <div className="grid grid-cols-3 gap-2 pt-2">
+                          <Sel label="table_type" value={cfg.table_type} options={TABLE_TYPES} onChange={(v) => setField('table_type', v)} />
+                          <Sel label="format" value={cfg.format} options={FORMATS} onChange={(v) => setField('format', v)} />
+                          <Sel label="write_compression" value={cfg.write_compression} options={COMPRESSIONS} onChange={(v) => setField('write_compression', v)} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Row 3: persist_docs */}
-                <div>
-                  <p className="text-[10px] text-[#8b8b8b] mb-1.5">persist_docs</p>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#8b8b8b]">
-                      <input type="checkbox" checked={cfg.persist_docs_relation}
-                        onChange={(e) => setField('persist_docs_relation', e.target.checked)}
-                        className="accent-[#007acc] w-3 h-3" />
-                      relation
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#8b8b8b]">
-                      <input type="checkbox" checked={cfg.persist_docs_columns}
-                        onChange={(e) => setField('persist_docs_columns', e.target.checked)}
-                        className="accent-[#007acc] w-3 h-3" />
-                      columns
-                    </label>
-                  </div>
+                {/* Persist docs — OPTIONAL */}
+                <div className={`rounded border transition-colors ${optGroups.persistDocs ? 'border-[#007acc]/40 bg-[#007acc]/5' : 'border-[#3e3e42]'}`}>
+                  <label className="flex items-center gap-2 px-3 py-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={optGroups.persistDocs}
+                      onChange={() => toggleGroup('persistDocs')}
+                      className="accent-[#007acc] w-3.5 h-3.5"
+                    />
+                    <span className="text-xs text-[#d4d4d4] font-medium">persist_docs</span>
+                    <span className="text-[10px] text-[#5a5a5a] ml-auto">
+                      {optGroups.persistDocs
+                        ? `relation: ${cfg.persist_docs_relation}, columns: ${cfg.persist_docs_columns}`
+                        : 'use project defaults'}
+                    </span>
+                  </label>
+                  {optGroups.persistDocs && (
+                    <div className="px-3 pb-3 border-t border-[#3e3e42] pt-2 flex gap-6">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#8b8b8b]">
+                        <input type="checkbox" checked={cfg.persist_docs_relation}
+                          onChange={(e) => setField('persist_docs_relation', e.target.checked)}
+                          className="accent-[#007acc] w-3 h-3" />
+                        relation
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#8b8b8b]">
+                        <input type="checkbox" checked={cfg.persist_docs_columns}
+                          onChange={(e) => setField('persist_docs_columns', e.target.checked)}
+                          className="accent-[#007acc] w-3 h-3" />
+                        columns
+                      </label>
+                    </div>
+                  )}
                 </div>
 
-                {/* Row 4: meta */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] text-[#8b8b8b] mb-1">meta.owner</label>
-                    <input value={cfg.owner} onChange={(e) => setField('owner', e.target.value)}
-                      placeholder="analytics"
-                      className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-2 py-1.5 text-xs text-[#d4d4d4] placeholder-[#5a5a5a] outline-none" />
-                  </div>
-                  <div className="flex items-end pb-1.5">
-                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#8b8b8b]">
-                      <input type="checkbox" checked={cfg.pii}
-                        onChange={(e) => setField('pii', e.target.checked)}
-                        className="accent-[#007acc] w-3 h-3" />
-                      meta.pii
-                    </label>
-                  </div>
+                {/* Meta — OPTIONAL */}
+                <div className={`rounded border transition-colors ${optGroups.meta ? 'border-[#007acc]/40 bg-[#007acc]/5' : 'border-[#3e3e42]'}`}>
+                  <label className="flex items-center gap-2 px-3 py-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={optGroups.meta}
+                      onChange={() => toggleGroup('meta')}
+                      className="accent-[#007acc] w-3.5 h-3.5"
+                    />
+                    <span className="text-xs text-[#d4d4d4] font-medium">meta</span>
+                    <span className="text-[10px] text-[#5a5a5a] ml-auto">
+                      {optGroups.meta ? `owner: ${cfg.owner}, pii: ${cfg.pii}` : 'use project defaults'}
+                    </span>
+                  </label>
+                  {optGroups.meta && (
+                    <div className="px-3 pb-3 border-t border-[#3e3e42] pt-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] text-[#8b8b8b] mb-1">owner</label>
+                          <input value={cfg.owner} onChange={(e) => setField('owner', e.target.value)}
+                            placeholder="analytics"
+                            className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-2 py-1.5 text-xs text-[#d4d4d4] placeholder-[#5a5a5a] outline-none" />
+                        </div>
+                        <div className="flex items-end pb-1.5">
+                          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#8b8b8b]">
+                            <input type="checkbox" checked={cfg.pii}
+                              onChange={(e) => setField('pii', e.target.checked)}
+                              className="accent-[#007acc] w-3 h-3" />
+                            pii = true
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Live preview of config block */}
                 <div>
                   <p className="text-[10px] text-[#5a5a5a] mb-1">Generated config block preview</p>
                   <pre className="text-[10px] font-mono text-[#8b8b8b] bg-[#111] rounded p-2 overflow-x-auto leading-relaxed">
-                    {generateConfigBlock(cfg, false)}
+                    {generateConfigBlock(cfg, false, optGroups)}
                   </pre>
                 </div>
               </div>

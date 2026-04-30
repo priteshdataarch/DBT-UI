@@ -85,16 +85,19 @@ function classifyLine(text: string, isStderr: boolean): LineType {
 }
 
 export async function POST(req: NextRequest) {
-  const { command, args = [], modelName } = (await req.json()) as {
+  const { command, args = [], modelName, target } = (await req.json()) as {
     command: string;
     args?: string[];
     modelName?: string;
+    target?: string;
   };
 
   const cmdArgs: string[] = [command, ...args];
   if (modelName) cmdArgs.push('--select', modelName);
   // Always point at the project directory
   cmdArgs.push('--project-dir', DBT_ROOT, '--profiles-dir', DBT_ROOT);
+  // Inject --target if a non-default environment was chosen
+  if (target?.trim()) cmdArgs.push('--target', target.trim());
 
   const encoder = new TextEncoder();
 

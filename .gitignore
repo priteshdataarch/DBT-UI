@@ -214,3 +214,4 @@ logs/
 dbt-ui/.env.local
 node_modules/
 .next/
+dbt-feature-report.html

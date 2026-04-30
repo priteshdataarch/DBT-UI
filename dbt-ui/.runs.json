@@ -1,0 +1,918 @@
+[
+  {
+    "id": "run-1777544912588-o1f60",
+    "command": "pwd",
+    "target": "dev",
+    "startedAt": "2026-04-30T10:28:32.543Z",
+    "durationMs": 45,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "/Users/pritesh/Desktop/DBT-UI/DBT-UI",
+    "lines": [
+      {
+        "text": "/Users/pritesh/Desktop/DBT-UI/DBT-UI",
+        "lineType": "info"
+      }
+    ]
+  },
+  {
+    "id": "run-1777544906152-y0fer",
+    "command": "git status",
+    "target": "dev",
+    "startedAt": "2026-04-30T10:28:25.732Z",
+    "durationMs": 420,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "no changes added to commit (use \"git add\" and/or \"git commit -a\")",
+    "lines": [
+      {
+        "text": "On branch main",
+        "lineType": "info"
+      },
+      {
+        "text": "Your branch is up to date with 'origin/main'.",
+        "lineType": "info"
+      },
+      {
+        "text": "Changes not staged for commit:",
+        "lineType": "info"
+      },
+      {
+        "text": "  (use \"git add <file>...\" to update what will be committed)",
+        "lineType": "info"
+      },
+      {
+        "text": "  (use \"git restore <file>...\" to discard changes in working directory)",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   .gitignore",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   dbt-ui/src/app/api/dbt/route.ts",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   dbt-ui/src/app/api/file/route.ts",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   dbt-ui/src/app/api/git/route.ts",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   dbt-ui/src/app/page.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   dbt-ui/src/components/CreateModelModal.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   dbt-ui/src/components/EditorPane.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   dbt-ui/src/components/GitPanel.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   dbt-ui/src/components/LineageView.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   dbt-ui/src/components/OutputPanel.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   models/marts/f_score.sql",
+        "lineType": "info"
+      },
+      {
+        "text": "\tmodified:   seeds/abc.csv",
+        "lineType": "info"
+      },
+      {
+        "text": "Untracked files:",
+        "lineType": "info"
+      },
+      {
+        "text": "  (use \"git add <file>...\" to include in what will be committed)",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/.runs.json",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/compile/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/explain/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/freshness/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/macros/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/manifest-meta/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/profiles/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/query/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/runs/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/shell/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/app/api/test-results/",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/components/GlobalSearch.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/components/MacrosPanel.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/components/RunHistoryPanel.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "\tdbt-ui/src/components/SqlEditorPanel.tsx",
+        "lineType": "info"
+      },
+      {
+        "text": "no changes added to commit (use \"git add\" and/or \"git commit -a\")",
+        "lineType": "info"
+      }
+    ]
+  },
+  {
+    "id": "run-1777544497136-lnrhu",
+    "command": "dbt ls -h",
+    "target": "dev",
+    "startedAt": "2026-04-30T10:21:35.940Z",
+    "durationMs": 1196,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "  -h, --help                      Show this message and exit.",
+    "lines": [
+      {
+        "text": "Usage: dbt ls [OPTIONS]",
+        "lineType": "info"
+      },
+      {
+        "text": "  List the resources in your project",
+        "lineType": "info"
+      },
+      {
+        "text": "Options:",
+        "lineType": "info"
+      },
+      {
+        "text": "  --cache-selected-only / --no-cache-selected-only",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  At start of run, populate relational cache",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  only for schemas containing selected nodes,",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  or for all schemas of interest.",
+        "lineType": "info"
+      },
+      {
+        "text": "  -d, --debug / --no-debug        Display debug logging during dbt execution.",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Useful for debugging and making bug reports.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --defer / --no-defer            If set, resolve unselected nodes by",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  deferring to the manifest within the --state",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  directory.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --defer-state DIRECTORY         Override the state directory for deferral",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  only.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --deprecated-favor-state TEXT   Internal flag for deprecating old env var.",
+        "lineType": "warning"
+      },
+      {
+        "text": "  -x, --fail-fast / --no-fail-fast",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Stop execution on first failure.",
+        "lineType": "error"
+      },
+      {
+        "text": "  --favor-state / --no-favor-state",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  If set, defer to the argument provided to",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  the state flag for resolving unselected",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  nodes, even if the node(s) exist as a",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  database object in the current environment.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --indirect-selection [eager|cautious|buildable|empty]",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Choose which tests to select that are",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  adjacent to selected resources. Eager is",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  most inclusive, cautious is most exclusive,",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  and buildable is in between. Empty includes",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  no tests at all.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --log-cache-events / --no-log-cache-events",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Enable verbose logging for relational cache",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  events to help when debugging.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --log-format [text|debug|json|default]",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Specify the format of logging to the console",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  and the log file. Use --log-format-file to",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  configure the format for the log file",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  differently than the console.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --log-format-file [text|debug|json|default]",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Specify the format of logging to the log",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  file by overriding the default value and the",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  general --log-format setting.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --log-level [debug|info|warn|error|none]",
+        "lineType": "error"
+      },
+      {
+        "text": "                                  Specify the minimum severity of events that",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  are logged to the console and the log file.",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Use --log-level-file to configure the",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  severity for the log file differently than",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  the console.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --log-level-file [debug|info|warn|error|none]",
+        "lineType": "error"
+      },
+      {
+        "text": "                                  Specify the minimum severity of events that",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  are logged to the log file by overriding the",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  default value and the general --log-level",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  setting.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --log-path PATH                 Configure the 'log-path'. Only applies this",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  setting for the current run. Overrides the",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  'DBT_LOG_PATH' if it is set.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --partial-parse / --no-partial-parse",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Allow for partial parsing by looking for and",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  writing to a pickle file in the target",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  directory. This overrides the user",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  configuration file.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --populate-cache / --no-populate-cache",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  At start of run, use `show` or",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  `information_schema` queries to populate a",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  relational cache, which can speed up",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  subsequent materializations.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --print / --no-print            Output all {{ print() }} macro calls.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --printer-width INTEGER         Sets the width of terminal output",
+        "lineType": "info"
+      },
+      {
+        "text": "  --profile TEXT                  Which existing profile to load. Overrides",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  setting in dbt_project.yml.",
+        "lineType": "info"
+      },
+      {
+        "text": "  -q, --quiet / --no-quiet        Suppress all non-error logging to stdout.",
+        "lineType": "error"
+      },
+      {
+        "text": "                                  Does not affect {{ print() }} macro calls.",
+        "lineType": "info"
+      },
+      {
+        "text": "  -r, --record-timing-info PATH   When this option is passed, dbt will output",
+        "lineType": "success"
+      },
+      {
+        "text": "                                  low-level timing stats to the specified",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  file. Example: `--record-timing-info",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  output.profile`",
+        "lineType": "info"
+      },
+      {
+        "text": "  --send-anonymous-usage-stats / --no-send-anonymous-usage-stats",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Send anonymous usage stats to dbt Labs.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --show-all-deprecations / --no-show-all-deprecations",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  By default, each type of a deprecation",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  warning is only shown once. Use this flag to",
+        "lineType": "warning"
+      },
+      {
+        "text": "                                  show all deprecation warning instances.",
+        "lineType": "warning"
+      },
+      {
+        "text": "  --state DIRECTORY               Unless overridden, use this state directory",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  for both state comparison and deferral.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --static-parser / --no-static-parser",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Use the static parser.",
+        "lineType": "info"
+      },
+      {
+        "text": "  -t, --target TEXT               Which target to load for the given profile",
+        "lineType": "info"
+      },
+      {
+        "text": "  --use-colors / --no-use-colors  Specify whether log output is colorized in",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  the console and the log file. Use --use-",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  colors-file/--no-use-colors-file to colorize",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  the log file differently than the console.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --use-colors-file / --no-use-colors-file",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Specify whether log file output is colorized",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  by overriding the default value and the",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  general --use-colors/--no-use-colors",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  setting.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --use-experimental-parser / --no-use-experimental-parser",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Enable experimental parsing features.",
+        "lineType": "info"
+      },
+      {
+        "text": "  -V, -v, --version               Show version information and exit",
+        "lineType": "info"
+      },
+      {
+        "text": "  --version-check / --no-version-check",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  If set, ensure the installed dbt version",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  matches the require-dbt-version specified in",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  the dbt_project.yml file (if any).",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Otherwise, allow them to differ.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --warn-error                    If dbt would normally warn, instead raise an",
+        "lineType": "warning"
+      },
+      {
+        "text": "                                  exception. Examples include --select that",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  selects nothing, deprecations,",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  configurations with no associated models,",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  invalid test configurations, and missing",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  sources/refs in tests.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --warn-error-options WARNERROROPTIONSTYPE",
+        "lineType": "warning"
+      },
+      {
+        "text": "                                  If dbt would normally warn, instead raise an",
+        "lineType": "warning"
+      },
+      {
+        "text": "                                  exception based on error/warn configuration.",
+        "lineType": "error"
+      },
+      {
+        "text": "                                  Examples include --select that selects",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  nothing, deprecations, configurations with",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  no associated models, invalid test",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  configurations, and missing sources/refs in",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  tests. This argument should be a YAML",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  string, with keys 'error' or 'warn'. eg.",
+        "lineType": "error"
+      },
+      {
+        "text": "                                  '{\"error\": \"all\", \"warn\":",
+        "lineType": "error"
+      },
+      {
+        "text": "                                  [\"NoNodesForSelectionCriteria\"]}'",
+        "lineType": "info"
+      },
+      {
+        "text": "  --write-json / --no-write-json  Whether or not to write the manifest.json",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  and run_results.json files to the target",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  directory",
+        "lineType": "info"
+      },
+      {
+        "text": "  --upload-to-artifacts-ingest-api / --no-upload-to-artifacts-ingest-api",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Whether or not to upload the artifacts to",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  the dbt Cloud API",
+        "lineType": "info"
+      },
+      {
+        "text": "  --exclude TUPLE                 Specify the nodes to exclude.",
+        "lineType": "info"
+      },
+      {
+        "text": "  -m, --models, --model TUPLE     Specify the nodes to include.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --output [json|name|path|selector]",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Specify the output format: either JSON or a",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  newline-delimited list of selectors, paths,",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  or names",
+        "lineType": "info"
+      },
+      {
+        "text": "  --output-keys TUPLE             Space-delimited listing of node properties",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  to include as custom keys for JSON output.",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Supports nested keys using dot notation",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  (e.g. `--output json --output-keys name",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  config.materialized resource_type`)",
+        "lineType": "info"
+      },
+      {
+        "text": "  --profiles-dir PATH             Which directory to look in for the",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  profiles.yml file. If not set, dbt will look",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  in the current working directory first, then",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  HOME/.dbt/",
+        "lineType": "info"
+      },
+      {
+        "text": "  --project-dir PATH              Which directory to look in for the",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  dbt_project.yml file. Default is the current",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  working directory and its parents.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --resource-types, --resource-type [metric|semantic_model|saved_query|source|analysis|function|model|test|unit_test|exposure|snapshot|seed|default|all]",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Restricts the types of resources that dbt",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  will include",
+        "lineType": "info"
+      },
+      {
+        "text": "  --exclude-resource-types, --exclude-resource-type [metric|semantic_model|saved_query|source|analysis|model|test|unit_test|exposure|snapshot|seed|function|default]",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  Specify the types of resources that dbt will",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  exclude",
+        "lineType": "info"
+      },
+      {
+        "text": "  -s, --select TUPLE              Specify the nodes to include.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --selector TEXT                 The selector name to use, as defined in",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  selectors.yml",
+        "lineType": "info"
+      },
+      {
+        "text": "  --target-path PATH              Configure the 'target-path'. Only applies",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  this setting for the current run. Overrides",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  the 'DBT_TARGET_PATH' if it is set.",
+        "lineType": "info"
+      },
+      {
+        "text": "  --vars YAML                     Supply variables to the project. This",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  argument overrides variables defined in your",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  dbt_project.yml file. This argument should",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  be a YAML string, eg. '{my_variable:",
+        "lineType": "info"
+      },
+      {
+        "text": "                                  my_value}'",
+        "lineType": "info"
+      },
+      {
+        "text": "  -h, --help                      Show this message and exit.",
+        "lineType": "info"
+      }
+    ]
+  },
+  {
+    "id": "run-1777544476321-h95qm",
+    "command": "dbt ls -l",
+    "target": "dev",
+    "startedAt": "2026-04-30T10:21:14.493Z",
+    "durationMs": 1828,
+    "exitCode": 2,
+    "status": "failed",
+    "summary": "Error: No such option: -l",
+    "lines": [
+      {
+        "text": "Usage: dbt ls [OPTIONS]",
+        "lineType": "info"
+      },
+      {
+        "text": "Try 'dbt ls -h' for help.",
+        "lineType": "info"
+      },
+      {
+        "text": "Error: No such option: -l",
+        "lineType": "error"
+      }
+    ]
+  },
+  {
+    "id": "run-1777540643127-j4p6n",
+    "command": "dbt seed",
+    "target": "dev",
+    "startedAt": "2026-04-30T09:16:47.801Z",
+    "durationMs": 35326,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "09:17:20  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1",
+    "lines": [
+      {
+        "text": "09:16:49  Running with dbt=1.11.8",
+        "lineType": "info"
+      },
+      {
+        "text": "09:16:49  Registered adapter: athena=1.10.0",
+        "lineType": "info"
+      },
+      {
+        "text": "09:16:49  Found 33 models, 70 data tests, 1 seed, 28 sources, 605 macros",
+        "lineType": "info"
+      },
+      {
+        "text": "09:16:49  ",
+        "lineType": "info"
+      },
+      {
+        "text": "09:16:49  Concurrency: 4 threads (target='dev')",
+        "lineType": "info"
+      },
+      {
+        "text": "09:16:49  ",
+        "lineType": "info"
+      },
+      {
+        "text": "09:16:54  1 of 1 START seed file dbt.abc ................................................. [RUN]",
+        "lineType": "info"
+      },
+      {
+        "text": "09:17:20  1 of 1 OK loaded seed file dbt.abc ............................................. [INSERT 1 in 25.47s]",
+        "lineType": "success"
+      },
+      {
+        "text": "09:17:20  ",
+        "lineType": "info"
+      },
+      {
+        "text": "09:17:20  Finished running 1 seed in 0 hours 0 minutes and 30.61 seconds (30.61s).",
+        "lineType": "info"
+      },
+      {
+        "text": "09:17:20  ",
+        "lineType": "info"
+      },
+      {
+        "text": "09:17:20  Completed successfully",
+        "lineType": "success"
+      },
+      {
+        "text": "09:17:20  ",
+        "lineType": "info"
+      },
+      {
+        "text": "09:17:20  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1",
+        "lineType": "success"
+      }
+    ]
+  }
+]

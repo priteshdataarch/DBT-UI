@@ -1,16 +1,20 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import FileExplorer from '@/components/FileExplorer';
 import EditorPane from '@/components/EditorPane';
 import ChatPanel from '@/components/ChatPanel';
 import CreateModelModal from '@/components/CreateModelModal';
 import CreateSourceModal from '@/components/CreateSourceModal';
 import CreateSeedModal from '@/components/CreateSeedModal';
-import OutputPanel, { type DbtCommand, type PreviewResult, type OutputPanelRef } from '@/components/OutputPanel';
+import OutputPanel, { type DbtCommand, type PreviewResult, type OutputPanelRef, type CommandCompletePayload } from '@/components/OutputPanel';
+import RunHistoryPanel from '@/components/RunHistoryPanel';
 import LineageView from '@/components/LineageView';
 import ResizeHandle from '@/components/ResizeHandle';
 import GitPanel from '@/components/GitPanel';
+import SqlEditorPanel from '@/components/SqlEditorPanel';
+import GlobalSearch from '@/components/GlobalSearch';
+import MacrosPanel from '@/components/MacrosPanel';
 import type { FileNode, OpenFileTab, ChatMessage } from '@/types';
 import {
   Database,
@@ -20,8 +24,10 @@ import {
   Wrench,
   BookOpen,
   ChevronDown,
-  Zap,
   Loader2,
+  TerminalSquare,
+  Search,
+  History,
 } from 'lucide-react';
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
@@ -31,6 +37,20 @@ function modelNameFromPath(p: string | null | undefined): string | null {
   const m = p.match(/([^/\\]+)\.sql$/);
   return m ? m[1] : null;
 }
+
+/** Project-wide only — used in the separate "All models" dropdown */
+const PROJECT_RUN_TEST_ITEMS: { label: string; description: string; cmd: DbtCommand }[] = [
+  {
+    label: 'Run — entire project',
+    description: 'dbt run (all runnable models)',
+    cmd: { command: 'run', args: [], label: 'dbt run' },
+  },
+  {
+    label: 'Test — entire project',
+    description: 'dbt test (all tests)',
+    cmd: { command: 'test', args: [], label: 'dbt test' },
+  },
+];
 
 // Dropdown button (e.g. "Docs ▾")
 // Uses position:fixed so it escapes overflow-x-auto / overflow-hidden parents.
@@ -43,7 +63,7 @@ function CmdDropdown({
 }: {
   label: string;
   icon: React.ReactNode;
-  items: { label: string; description: string; cmd: DbtCommand }[];
+  items: { label: string; description: string; cmd: DbtCommand; disabled?: boolean }[];
   disabled?: boolean;
   onCommand: (cmd: DbtCommand) => void;
 }) {
@@ -53,6 +73,7 @@ function CmdDropdown({
   const dropRef = useRef<HTMLDivElement>(null);
 
   const handleToggle = () => {
+    if (disabled) return;
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect();
       setDropPos({ top: r.bottom + 4, left: r.left });
@@ -96,15 +117,22 @@ function CmdDropdown({
           {items.map((item) => (
             <button
               key={item.label}
+              type="button"
+              disabled={item.disabled}
               // onMouseDown fires BEFORE any document click listener can unmount
               // the dropdown, guaranteeing the command is dispatched even if the
               // dropdown closes immediately afterwards.
               onMouseDown={(e) => {
                 e.preventDefault(); // keep focus on editor
+                if (item.disabled) return;
                 setOpen(false);
                 onCommand(item.cmd);
               }}
-              className="block w-full text-left px-3 py-2 hover:bg-[#3e3e42] transition-colors border-b border-[#3e3e42] last:border-b-0"
+              className={`block w-full text-left px-3 py-2 transition-colors border-b border-[#3e3e42] last:border-b-0 ${
+                item.disabled
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-[#3e3e42]'
+              }`}
             >
               <div className="text-xs text-[#d4d4d4] font-medium">{item.label}</div>
               <div className="text-[10px] text-[#6e6e6e] mt-0.5">{item.description}</div>
@@ -125,7 +153,8 @@ export default function Home() {
   const [showModelModal, setShowModelModal] = useState(false);
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
-  const [showGitPanel, setShowGitPanel] = useState(false);
+  const [showGitPanel, setShowGitPanel]       = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [gitAhead, setGitAhead] = useState(0);
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
@@ -135,18 +164,52 @@ export default function Home() {
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [activeOutputTab, setActiveOutputTab] = useState<'output' | 'preview'>('output');
+  const [activeOutputTab, setActiveOutputTab] = useState<'output' | 'preview' | 'tests' | 'freshness'>('output');
   // Resizable panel dimensions
   const [explorerWidth, setExplorerWidth] = useState(240);
   const [chatWidth, setChatWidth] = useState(320);
   const [outputHeight, setOutputHeight] = useState(380);
   const [showLineage, setShowLineage] = useState(false);
-  const [dbtRunning, setDbtRunning] = useState<string | null>(null); // label of running command
+  const [showSqlEditor, setShowSqlEditor]     = useState(false);
+  const [showMacrosPanel, setShowMacrosPanel] = useState(false);
+  const [showRunHistory, setShowRunHistory]   = useState(false);
+  const [dbtRunning, setDbtRunning]           = useState<string | null>(null);
+  // Environment target
+  const [dbtTarget, setDbtTarget]             = useState<string>('dev');
+  const [availableTargets, setAvailableTargets] = useState<string[]>(['dev']);
+  const [showTargetMenu, setShowTargetMenu]   = useState(false);
 
   const activeModel = modelNameFromPath(activeTab);
   const activeFileTab = openTabs.find((t) => t.path === activeTab);
 
-  // Fetch git branch name once on mount
+  /** Per-model run / test + graph selectors — left dropdown */
+  const modelRunTestDropdownItems = useMemo(() => {
+    if (!activeModel) return [] as { label: string; description: string; cmd: DbtCommand; disabled?: boolean }[];
+    const m = activeModel;
+    return [
+      {
+        label: `Run — ${m} only`,
+        description: `dbt run --select ${m}`,
+        cmd: { command: 'run', args: [], modelName: m, label: `dbt run --select ${m}` },
+      },
+      {
+        label: `Run — +${m} (upstream + model)`,
+        description: 'Parents and this model',
+        cmd: { command: 'run', args: [], modelName: `+${m}`, label: `dbt run --select +${m}` },
+      },
+      {
+        label: `Run — ${m}+ (model + downstream)`,
+        description: 'This model and children',
+        cmd: { command: 'run', args: [], modelName: `${m}+`, label: `dbt run --select ${m}+` },
+      },
+      {
+        label: `Test — ${m} (tests for this model)`,
+        description: `dbt test --select ${m}`,
+        cmd: { command: 'test', args: [], modelName: m, label: `dbt test --select ${m}` },
+      },
+    ];
+  }, [activeModel]);
+
   useEffect(() => {
     fetch('/api/git')
       .then((r) => r.json())
@@ -155,6 +218,29 @@ export default function Home() {
         if (d.ahead) setGitAhead(d.ahead);
       })
       .catch(() => {});
+  }, []);
+
+  // Fetch available dbt targets from profiles.yml
+  useEffect(() => {
+    fetch('/api/profiles')
+      .then((r) => r.json())
+      .then((d: { targets?: string[]; defaultTarget?: string }) => {
+        if (d.targets?.length) setAvailableTargets(d.targets);
+        if (d.defaultTarget) setDbtTarget(d.defaultTarget);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Ctrl+P / Cmd+P → Global Search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+        e.preventDefault();
+        setShowGlobalSearch((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   // Warn before browser tab close / refresh when there are unsaved changes
@@ -188,6 +274,27 @@ export default function Home() {
           { path: node.path, name: node.name, content, isDirty: false, language },
         ]);
         setActiveTab(node.path);
+      } catch { /* ignore */ }
+    },
+    [openTabs]
+  );
+
+  const openFileByPath = useCallback(
+    async (filePath: string) => {
+      // filePath from manifest is relative to DBT_ROOT — resolve to an API-accessible path
+      const name = filePath.split('/').pop() ?? filePath;
+      const ext = name.split('.').pop() ?? '';
+      const language: OpenFileTab['language'] =
+        ext === 'sql' ? 'sql' : ext === 'md' ? 'markdown' : ext === 'csv' ? 'csv' : 'yaml';
+      const existing = openTabs.find((t) => t.path === filePath || t.name === name);
+      if (existing) { setActiveTab(existing.path); setShowGlobalSearch(false); return; }
+      try {
+        const res = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
+        if (!res.ok) return;
+        const { content } = await res.json();
+        setOpenTabs((prev) => [...prev, { path: filePath, name, content, isDirty: false, language }]);
+        setActiveTab(filePath);
+        setShowGlobalSearch(false);
       } catch { /* ignore */ }
     },
     [openTabs]
@@ -265,12 +372,11 @@ export default function Home() {
     setOutputOpen(true);
     setActiveOutputTab('output');
     setDbtRunning(cmd.label);
-    // Defer by one tick so React flushes setOutputOpen(true) before runCommand
-    // is called. This ensures the panel is mounted/visible before output starts.
     setTimeout(() => {
-      outputPanelRef.current?.runCommand(cmd);
+      outputPanelRef.current?.runCommand({ ...cmd, target: dbtTarget });
     }, 0);
-  }, []);
+  // dbtTarget is read inside the timeout so include it as dep
+  }, [dbtTarget]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePreview = useCallback(async (filePath: string) => {
     setOutputOpen(true);
@@ -295,6 +401,17 @@ export default function Home() {
     } finally {
       setPreviewLoading(false);
     }
+  }, []);
+
+  const handleCompile = useCallback(async (filePath: string) => {
+    const res = await fetch('/api/compile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? 'Compile failed');
+    return { sql: data.sql as string, compiledPath: data.compiledPath as string };
   }, []);
 
   const docsItems = [
@@ -372,60 +489,77 @@ export default function Home() {
 
         <div className="w-px h-4 bg-[#3e3e42] mx-1 shrink-0" />
 
-        {/* ── dbt command buttons ── */}
-        {/* Run all */}
-        <button
-          onClick={() => runDbt({ command: 'run', args: [], label: 'dbt run' })}
-          title="dbt run"
-          className="flex items-center gap-1 px-2.5 py-1 text-xs rounded text-white bg-[#0e639c] hover:bg-[#1177bb] transition-colors shrink-0"
-        >
-          <Play size={11} fill="currentColor" /> Run
-        </button>
+        {/* ── Environment target picker ── */}
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setShowTargetMenu((v) => !v)}
+            title="Switch dbt target environment"
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-mono font-semibold transition-colors ${
+              dbtTarget === 'prod' || dbtTarget === 'production'
+                ? 'border-[#f59e0b]/50 bg-[#f59e0b]/10 text-[#f59e0b]'
+                : 'border-[#4ade80]/40 bg-[#4ade80]/10 text-[#4ade80]'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              dbtTarget === 'prod' || dbtTarget === 'production' ? 'bg-[#f59e0b]' : 'bg-[#4ade80]'
+            }`} />
+            {dbtTarget}
+            <ChevronDown size={9} />
+          </button>
+          {showTargetMenu && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setShowTargetMenu(false)} />
+              <div className="absolute top-7 left-0 z-40 bg-[#252526] border border-[#3e3e42] rounded shadow-xl py-1 min-w-[100px] text-xs">
+                {availableTargets.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => { setDbtTarget(t); setShowTargetMenu(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[#2a2d2e] transition-colors ${
+                      t === dbtTarget ? 'text-[#d4d4d4] font-semibold' : 'text-[#8b8b8b]'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      t === 'prod' || t === 'production' ? 'bg-[#f59e0b]' : 'bg-[#4ade80]'
+                    }`} />
+                    {t}
+                    {t === dbtTarget && <span className="ml-auto text-[10px] text-[#007acc]">active</span>}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
 
-        {/* Run model */}
-        <button
-          disabled={!activeModel}
-          onClick={() =>
-            runDbt({
-              command: 'run',
-              args: [],
-              modelName: activeModel!,
-              label: `dbt run --select ${activeModel}`,
-            })
+        <div className="w-px h-4 bg-[#3e3e42] mx-1 shrink-0" />
+
+        {/* Selected model: run / test + graph — one dropdown on the left */}
+        <div
+          className="shrink-0 max-w-[200px]"
+          title={
+            activeModel
+              ? `Run or test ${activeModel} (and graph)`
+              : 'Open a .sql model tab first'
           }
-          title={activeModel ? `dbt run --select ${activeModel}` : 'Open a .sql model first'}
-          className="flex items-center gap-1 px-2.5 py-1 text-xs rounded text-[#d4d4d4] border border-[#5a5a5a] hover:bg-[#3e3e42] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
         >
-          <Zap size={11} />
-          {activeModel ? `Run ${activeModel}` : 'Run Model'}
-        </button>
-
-        {/* Test all */}
-        <button
-          onClick={() => runDbt({ command: 'test', args: [], label: 'dbt test' })}
-          title="dbt test"
-          className="flex items-center gap-1 px-2.5 py-1 text-xs rounded text-[#d4d4d4] border border-[#5a5a5a] hover:bg-[#3e3e42] transition-colors shrink-0"
-        >
-          <FlaskConical size={11} /> Test
-        </button>
-
-        {/* Test model */}
-        <button
-          disabled={!activeModel}
-          onClick={() =>
-            runDbt({
-              command: 'test',
-              args: [],
-              modelName: activeModel!,
-              label: `dbt test --select ${activeModel}`,
-            })
+          <CmdDropdown
+            label={
+              activeModel
+                ? activeModel.length > 16
+                  ? `${activeModel.slice(0, 14)}…`
+                  : activeModel
+                : 'This model'
+            }
+          icon={
+            <span className="flex items-center gap-0.5">
+              <Play size={9} fill="currentColor" />
+              <FlaskConical size={9} />
+            </span>
           }
-          title={activeModel ? `dbt test --select ${activeModel}` : 'Open a .sql model first'}
-          className="flex items-center gap-1 px-2.5 py-1 text-xs rounded text-[#d4d4d4] border border-[#5a5a5a] hover:bg-[#3e3e42] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-        >
-          <FlaskConical size={11} />
-          {activeModel ? `Test ${activeModel}` : 'Test Model'}
-        </button>
+          items={modelRunTestDropdownItems}
+          disabled={!activeModel}
+          onCommand={runDbt}
+        />
+        </div>
 
         {/* Docs dropdown */}
         <CmdDropdown label="Docs" icon={<BookOpen size={11} />} items={docsItems} onCommand={runDbt} />
@@ -444,6 +578,32 @@ export default function Home() {
           <GitBranch size={11} />
           Lineage
         </button>
+        <button
+          onClick={() => setShowSqlEditor(true)}
+          title="Open SQL Editor and run Athena queries"
+          className="flex items-center gap-1 px-2.5 py-1 text-xs rounded text-[#d4d4d4] border border-[#5a5a5a] hover:bg-[#3e3e42] transition-colors shrink-0"
+        >
+          <TerminalSquare size={11} />
+          SQL Editor
+        </button>
+
+        <button
+          onClick={() => setShowGlobalSearch(true)}
+          title="Global search — models, sources, columns (Ctrl+P)"
+          className="flex items-center gap-1 px-2.5 py-1 text-xs rounded text-[#d4d4d4] border border-[#5a5a5a] hover:bg-[#3e3e42] transition-colors shrink-0"
+        >
+          <Search size={11} />
+          Search
+        </button>
+
+        <button
+          onClick={() => setShowRunHistory(true)}
+          title="View run history"
+          className="flex items-center gap-1 px-2.5 py-1 text-xs rounded text-[#d4d4d4] border border-[#5a5a5a] hover:bg-[#3e3e42] transition-colors shrink-0"
+        >
+          <History size={11} />
+          History
+        </button>
 
         {/* ── Running indicator ── */}
         {dbtRunning && (
@@ -454,6 +614,26 @@ export default function Home() {
         )}
 
         <div className="flex-1" />
+
+        {/* Entire project — Run / Test (right side, before create actions) */}
+        <div
+          className="shrink-0 mr-1"
+          title="Run or test the whole dbt project (no --select)"
+        >
+          <CmdDropdown
+            label="Entire project"
+            icon={
+              <span className="flex items-center gap-0.5">
+                <Play size={9} fill="currentColor" />
+                <FlaskConical size={9} />
+              </span>
+            }
+            items={PROJECT_RUN_TEST_ITEMS}
+            onCommand={runDbt}
+          />
+        </div>
+
+        <div className="w-px h-4 bg-[#3e3e42] mx-1 shrink-0" />
 
         {/* Create buttons */}
         <button
@@ -473,6 +653,14 @@ export default function Home() {
           className="px-2.5 py-1 text-xs bg-[#7d6608] hover:bg-[#b8860b] rounded text-white font-medium transition-colors shrink-0"
         >
           + New Seed
+        </button>
+        <button
+          onClick={() => setShowMacrosPanel(true)}
+          title="Browse and create dbt macros"
+          className="flex items-center gap-1 px-2.5 py-1 text-xs bg-[#6b3fa0] hover:bg-[#7c52b0] rounded text-white font-medium transition-colors shrink-0"
+        >
+          <Wrench size={11} />
+          Macros
         </button>
       </div>
 
@@ -504,6 +692,7 @@ export default function Home() {
             onContentChange={updateTabContent}
             onSave={saveFile}
             onPreview={handlePreview}
+            onCompile={handleCompile}
           />
 
           {/* Drag handle — editor | chat */}
@@ -551,7 +740,35 @@ export default function Home() {
             ref={outputPanelRef}
             open={outputOpen}
             onToggle={() => setOutputOpen((v) => !v)}
-            onCommandComplete={() => setDbtRunning(null)}
+            dbtTarget={dbtTarget}
+            onCommandComplete={(payload: CommandCompletePayload) => {
+              const { exitCode, durationMs, label, target, lines } = payload;
+              setDbtRunning(null);
+              if (/^dbt\s+test\b/.test(label) || /^dbt\s+build\b/.test(label)) {
+                setActiveOutputTab('tests');
+              } else if (/^dbt\s+source\b.*freshness|^dbt\s+.*freshness/.test(label)) {
+                setActiveOutputTab('freshness');
+              }
+              // Save to run history
+              const status = exitCode === 0 ? 'success' : 'failed';
+              const summary = [...lines].reverse().find(l => l.text.trim())?.text ?? '';
+              const entry = {
+                id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                command: label,
+                target,
+                startedAt: new Date(Date.now() - durationMs).toISOString(),
+                durationMs,
+                exitCode,
+                status,
+                summary,
+                lines,
+              };
+              fetch('/api/runs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(entry),
+              }).catch(() => {});
+            }}
             previewResult={previewResult}
             previewLoading={previewLoading}
             previewError={previewError}
@@ -627,6 +844,44 @@ export default function Home() {
           onOpenModel={(filePath, name) => {
             setShowLineage(false);
             openFile({ name, path: filePath, type: 'file' });
+          }}
+        />
+      )}
+      {showSqlEditor && (
+        <SqlEditorPanel onClose={() => setShowSqlEditor(false)} />
+      )}
+
+      {showGlobalSearch && (
+        <GlobalSearch
+          onClose={() => setShowGlobalSearch(false)}
+          onOpenFile={openFileByPath}
+        />
+      )}
+
+      {showMacrosPanel && (
+        <MacrosPanel
+          onClose={() => setShowMacrosPanel(false)}
+          onOpenFile={(filePath) => {
+            setShowMacrosPanel(false);
+            void openFileByPath(filePath);
+          }}
+        />
+      )}
+
+      {showRunHistory && (
+        <RunHistoryPanel
+          onClose={() => setShowRunHistory(false)}
+          onRerun={(cmdLabel) => {
+            setShowRunHistory(false);
+            // Parse "dbt <command>" form back to a runnable DbtCommand
+            const parts = cmdLabel.replace(/^dbt\s+/, '').split(/\s+/);
+            const command = parts[0] ?? 'run';
+            const selectIdx = parts.indexOf('--select');
+            const modelName = selectIdx !== -1 ? parts[selectIdx + 1] : undefined;
+            const restArgs = parts.slice(1).filter((_, i, arr) =>
+              arr[i - 1] !== '--select' && arr[i] !== '--select' && arr[i] !== modelName
+            );
+            runDbt({ command, args: restArgs, modelName, label: cmdLabel });
           }}
         />
       )}
