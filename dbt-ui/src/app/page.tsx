@@ -44,6 +44,8 @@ function modelNameFromPath(p: string | null | undefined): string | null {
 }
 
 const FILE_LOCK_HEARTBEAT_MS = 42_000;
+/** Poll while read-only because someone else holds the lock — detect release without closing the tab. */
+const FILE_LOCK_RETRY_POLL_MS = 8_000;
 
 type LockFields = Pick<OpenFileTab, 'baseMtimeMs' | 'lockToken' | 'lockBlockedBy' | 'fileLockBypass'>;
 
@@ -232,6 +234,7 @@ export default function Home() {
   const [showMacrosPanel, setShowMacrosPanel] = useState(false);
   const [showRunHistory, setShowRunHistory]   = useState(false);
   const [dbtRunning, setDbtRunning]           = useState<string | null>(null);
+  const [lockRetryLoading, setLockRetryLoading] = useState(false);
   // Environment target
   const [dbtTarget, setDbtTarget]             = useState<string>('dev');
   const [availableTargets, setAvailableTargets] = useState<string[]>(['dev']);
@@ -344,6 +347,68 @@ export default function Home() {
     }, FILE_LOCK_HEARTBEAT_MS);
     return () => window.clearInterval(id);
   }, []);
+
+  /** Re-fetch lock + disk content when transitioning from blocked-by-other to editable. */
+  const tryUpgradeLockForTab = useCallback(async (path: string) => {
+    const tab = openTabsRef.current.find((t) => t.path === path);
+    if (!tab?.lockBlockedBy || tab.fileLockBypass) return;
+
+    const lock = await fetchFileLockState(path, tab.baseMtimeMs);
+
+    if (lock.lockBlockedBy && !lock.lockToken && !lock.fileLockBypass) {
+      setOpenTabs((prev) =>
+        prev.map((t) =>
+          t.path === path && lock.lockBlockedBy !== t.lockBlockedBy
+            ? { ...t, lockBlockedBy: lock.lockBlockedBy! }
+            : t
+        )
+      );
+      return;
+    }
+
+    let content = tab.content;
+    let baseMtimeMs = tab.baseMtimeMs;
+    try {
+      const res = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+      if (res.ok) {
+        const d = (await res.json()) as { content: string; mtimeMs?: number };
+        content = d.content;
+        baseMtimeMs = typeof d.mtimeMs === 'number' ? d.mtimeMs : tab.baseMtimeMs;
+      }
+    } catch {
+      /* keep cached buffer */
+    }
+
+    setOpenTabs((prev) =>
+      prev.map((t) =>
+        t.path === path ? { ...t, ...lock, content, baseMtimeMs, isDirty: false } : t
+      )
+    );
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const paths = openTabsRef.current
+        .filter((t) => t.lockBlockedBy && !t.fileLockBypass)
+        .map((t) => t.path);
+      for (const path of paths) {
+        void tryUpgradeLockForTab(path);
+      }
+    }, FILE_LOCK_RETRY_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [tryUpgradeLockForTab]);
+
+  const handleRetryAcquireLock = useCallback(async () => {
+    if (!activeTab) return;
+    const tab = openTabs.find((t) => t.path === activeTab);
+    if (!tab?.lockBlockedBy || tab.fileLockBypass) return;
+    setLockRetryLoading(true);
+    try {
+      await tryUpgradeLockForTab(activeTab);
+    } finally {
+      setLockRetryLoading(false);
+    }
+  }, [activeTab, openTabs, tryUpgradeLockForTab]);
 
   // ── File operations ────────────────────────────────────────────────────────
 
@@ -956,6 +1021,8 @@ export default function Home() {
             onSave={saveFile}
             onPreview={handlePreview}
             onCompile={handleCompile}
+            onRetryAcquireLock={handleRetryAcquireLock}
+            lockRetryLoading={lockRetryLoading}
           />
 
           {/* Drag handle — editor | chat */}

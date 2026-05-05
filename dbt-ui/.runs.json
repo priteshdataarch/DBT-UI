@@ -1,5 +1,41 @@
 [
   {
+    "id": "run-1777976114722-iwlvd",
+    "command": "dbt compile",
+    "target": "dev",
+    "startedAt": "2026-05-05T10:15:05.070Z",
+    "durationMs": 9652,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "10:15:08  ",
+    "lines": [
+      {
+        "text": "10:15:07  Running with dbt=1.11.8",
+        "lineType": "info"
+      },
+      {
+        "text": "10:15:08  Registered adapter: athena=1.10.0",
+        "lineType": "info"
+      },
+      {
+        "text": "10:15:08  Found 34 models, 70 data tests, 28 sources, 605 macros",
+        "lineType": "info"
+      },
+      {
+        "text": "10:15:08  ",
+        "lineType": "info"
+      },
+      {
+        "text": "10:15:08  Concurrency: 4 threads (target='dev')",
+        "lineType": "info"
+      },
+      {
+        "text": "10:15:08  ",
+        "lineType": "info"
+      }
+    ]
+  },
+  {
     "id": "run-1777967113043-o0m91",
     "command": "dbt run --select --select d_client --target dev",
     "target": "dev",
