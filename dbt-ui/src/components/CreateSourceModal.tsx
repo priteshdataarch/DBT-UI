@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Plus, Trash2, ChevronDown, ChevronRight, FolderOpen, RefreshCw } from 'lucide-react';
+import { filePutPayload } from '@/lib/clientFileLockToken';
 
 interface Props {
   onClose: () => void;
@@ -384,12 +385,15 @@ export default function CreateSourceModal({ onClose, onCreated }: Props) {
         savedPath = `models/sources/${selectedFolder}/${selectedFile}`;
         const existingRes = await fetch(`/api/file?path=${encodeURIComponent(savedPath)}`);
         if (!existingRes.ok) throw new Error('Could not read existing file');
-        const { content: existing } = await existingRes.json();
+        const existingData = (await existingRes.json()) as { content: string; mtimeMs?: number };
+        const existing = existingData.content;
+        const baseMtime =
+          typeof existingData.mtimeMs === 'number' ? existingData.mtimeMs : undefined;
         const merged = appendTablesToYaml(existing, tables);
         const putRes = await fetch('/api/file', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: savedPath, content: merged }),
+          body: JSON.stringify(filePutPayload(savedPath, merged, baseMtime)),
         });
         if (!putRes.ok) throw new Error('Failed to update source file');
       }

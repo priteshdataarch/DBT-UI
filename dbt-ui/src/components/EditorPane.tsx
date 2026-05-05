@@ -205,6 +205,7 @@ export default function EditorPane({
   onCompile,
 }: Props) {
   const activeFileTab = tabs.find((t) => t.path === activeTab);
+  const lockBlockedBy = activeFileTab?.lockBlockedBy ?? null;
 
   // Manifest meta for completions
   const manifestMeta = useRef<ManifestMetaResponse | null>(null);
@@ -400,10 +401,11 @@ export default function EditorPane({
     (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        if (activeTab) onSave(activeTab);
+        const tab = tabs.find((t) => t.path === activeTab);
+        if (activeTab && !tab?.lockBlockedBy) onSave(activeTab);
       }
     },
-    [activeTab, onSave]
+    [activeTab, onSave, tabs]
   );
 
   useEffect(() => {
@@ -545,7 +547,7 @@ export default function EditorPane({
 
             <button
               onClick={() => onSave(activeTab!)}
-              disabled={!activeFileTab.isDirty}
+              disabled={!activeFileTab.isDirty || !!lockBlockedBy}
               className="flex items-center gap-1 text-xs text-[#8b8b8b] hover:text-[#d4d4d4] disabled:opacity-30 disabled:cursor-not-allowed px-2 py-0.5 rounded hover:bg-[#3e3e42] transition-colors"
               title="Save (⌘S)"
             >
@@ -553,6 +555,16 @@ export default function EditorPane({
               {activeFileTab.isDirty ? 'Save' : 'Saved'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Lock / conflict banner ───────────────────────── */}
+      {lockBlockedBy && (
+        <div className="flex items-start gap-2 px-3 py-2 bg-[#c58628]/15 border-b border-[#c58628]/35 text-[#e9d493] text-xs shrink-0">
+          <AlertCircle size={12} className="mt-0.5 shrink-0" />
+          <span className="leading-snug">
+            Read-only — {lockBlockedBy.includes('@') ? `another editor holds this file (${lockBlockedBy}).` : lockBlockedBy}
+          </span>
         </div>
       )}
 
@@ -646,6 +658,7 @@ export default function EditorPane({
                 padding: { top: 12 },
                 bracketPairColorization: { enabled: true },
                 guides: { bracketPairs: true },
+                readOnly: !!lockBlockedBy,
               }}
             />
           )}

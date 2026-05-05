@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight, Plus } from 'lucide-react';
+import { filePutPayload } from '@/lib/clientFileLockToken';
 
 interface Props {
   onClose: () => void;
@@ -324,8 +325,21 @@ export default function CreateModelModal({ onClose, onCreated, initialQuerySql =
         const schemaPath = `${activeFolder}/schema.yml`;
         const getRes = await fetch(`/api/file?path=${encodeURIComponent(schemaPath)}`);
         if (getRes.ok) {
-          const { content } = await getRes.json();
-          await fetch('/api/file', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: schemaPath, content: content.trimEnd() + generateSchemaEntry(modelName) + '\n' }) });
+          const schemaData = (await getRes.json()) as { content: string; mtimeMs?: number };
+          const content = schemaData.content;
+          const baseMtime =
+            typeof schemaData.mtimeMs === 'number' ? schemaData.mtimeMs : undefined;
+          await fetch('/api/file', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(
+              filePutPayload(
+                schemaPath,
+                content.trimEnd() + generateSchemaEntry(modelName) + '\n',
+                baseMtime
+              )
+            ),
+          });
         } else {
           await fetch('/api/file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: schemaPath, content: `version: 2\n\nmodels:${generateSchemaEntry(modelName)}\n` }) });
         }

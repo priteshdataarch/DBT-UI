@@ -1,5 +1,289 @@
 [
   {
+    "id": "run-1777967113043-o0m91",
+    "command": "dbt run --select --select d_client --target dev",
+    "target": "dev",
+    "startedAt": "2026-05-05T07:44:36.155Z",
+    "durationMs": 36888,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "07:45:11  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1",
+    "lines": [
+      {
+        "text": "07:44:37  Running with dbt=1.11.8",
+        "lineType": "info"
+      },
+      {
+        "text": "07:44:37  Registered adapter: athena=1.10.0",
+        "lineType": "info"
+      },
+      {
+        "text": "07:44:38  Found 33 models, 70 data tests, 28 sources, 605 macros",
+        "lineType": "info"
+      },
+      {
+        "text": "07:44:38  The selection criterion '--select' does not match any enabled nodes",
+        "lineType": "info"
+      },
+      {
+        "text": "07:44:38  ",
+        "lineType": "info"
+      },
+      {
+        "text": "07:44:38  Concurrency: 4 threads (target='dev')",
+        "lineType": "info"
+      },
+      {
+        "text": "07:44:38  ",
+        "lineType": "info"
+      },
+      {
+        "text": "07:44:42  1 of 1 START sql table model dbt.d_client ...................................... [RUN]",
+        "lineType": "info"
+      },
+      {
+        "text": "07:45:11  1 of 1 OK created sql table model dbt.d_client ................................. [OK 867 in 29.31s]",
+        "lineType": "success"
+      },
+      {
+        "text": "07:45:11  ",
+        "lineType": "info"
+      },
+      {
+        "text": "07:45:11  Finished running 1 table model in 0 hours 0 minutes and 33.44 seconds (33.44s).",
+        "lineType": "info"
+      },
+      {
+        "text": "07:45:11  ",
+        "lineType": "info"
+      },
+      {
+        "text": "07:45:11  Completed successfully",
+        "lineType": "success"
+      },
+      {
+        "text": "07:45:11  ",
+        "lineType": "info"
+      },
+      {
+        "text": "07:45:11  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1",
+        "lineType": "success"
+      }
+    ]
+  },
+  {
+    "id": "run-1777965636789-g3ner",
+    "command": "dbt docs generate",
+    "target": "dev",
+    "startedAt": "2026-05-05T07:20:26.018Z",
+    "durationMs": 10771,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "07:20:35  Catalog written to /Users/pritesh/Desktop/DBT-UI/DBT-UI/target/catalog.json",
+    "lines": [
+      {
+        "text": "07:20:27  Running with dbt=1.11.8",
+        "lineType": "info"
+      },
+      {
+        "text": "07:20:27  Registered adapter: athena=1.10.0",
+        "lineType": "info"
+      },
+      {
+        "text": "07:20:27  Found 33 models, 70 data tests, 28 sources, 605 macros",
+        "lineType": "info"
+      },
+      {
+        "text": "07:20:27  ",
+        "lineType": "info"
+      },
+      {
+        "text": "07:20:27  Concurrency: 4 threads (target='dev')",
+        "lineType": "info"
+      },
+      {
+        "text": "07:20:27  ",
+        "lineType": "info"
+      },
+      {
+        "text": "07:20:31  Building catalog",
+        "lineType": "info"
+      },
+      {
+        "text": "/Users/pritesh/Desktop/DBT-UI/DBT-UI/venv/lib/python3.13/site-packages/agate/type_tester.py:92: RuntimeWarning: \"table_owner\" does not match the name of any column in this table.",
+        "lineType": "warning"
+      },
+      {
+        "text": "  warnings.warn('\"%s\" does not match the name of any column in this table.' % name, RuntimeWarning)",
+        "lineType": "warning"
+      },
+      {
+        "text": "/Users/pritesh/Desktop/DBT-UI/DBT-UI/venv/lib/python3.13/site-packages/agate/type_tester.py:92: RuntimeWarning: \"table_owner\" does not match the name of any column in this table.",
+        "lineType": "warning"
+      },
+      {
+        "text": "  warnings.warn('\"%s\" does not match the name of any column in this table.' % name, RuntimeWarning)",
+        "lineType": "warning"
+      },
+      {
+        "text": "07:20:35  Catalog written to /Users/pritesh/Desktop/DBT-UI/DBT-UI/target/catalog.json",
+        "lineType": "info"
+      }
+    ]
+  },
+  {
+    "id": "run-1777965595536-keiuy",
+    "command": "dbt docs generate",
+    "target": "dev",
+    "startedAt": "2026-05-05T07:19:52.314Z",
+    "durationMs": 3222,
+    "exitCode": 2,
+    "status": "failed",
+    "summary": "      in \"<unicode string>\", line 2, column 16",
+    "lines": [
+      {
+        "text": "07:19:53  Running with dbt=1.11.8",
+        "lineType": "info"
+      },
+      {
+        "text": "07:19:53  Registered adapter: athena=1.10.0",
+        "lineType": "info"
+      },
+      {
+        "text": "07:19:54  Encountered an error:",
+        "lineType": "error"
+      },
+      {
+        "text": "Parsing Error",
+        "lineType": "error"
+      },
+      {
+        "text": "  Error reading mursion_dbt_athena: marts/schema.yml - Runtime Error",
+        "lineType": "error"
+      },
+      {
+        "text": "    Syntax error near line 2",
+        "lineType": "error"
+      },
+      {
+        "text": "    ------------------------------",
+        "lineType": "info"
+      },
+      {
+        "text": "    1  | - name: test_model",
+        "lineType": "info"
+      },
+      {
+        "text": "    2  |     description: \"TODO: describe test_model\"",
+        "lineType": "info"
+      },
+      {
+        "text": "    3  |     columns:",
+        "lineType": "info"
+      },
+      {
+        "text": "    4  |       - name: id",
+        "lineType": "info"
+      },
+      {
+        "text": "    5  |         description: \"Primary key\"",
+        "lineType": "info"
+      },
+      {
+        "text": "    Raw Error:",
+        "lineType": "error"
+      },
+      {
+        "text": "    ------------------------------",
+        "lineType": "info"
+      },
+      {
+        "text": "    mapping values are not allowed in this context",
+        "lineType": "info"
+      },
+      {
+        "text": "      in \"<unicode string>\", line 2, column 16",
+        "lineType": "info"
+      }
+    ]
+  },
+  {
+    "id": "run-1777965519013-xmkqg",
+    "command": "dbt docs generate",
+    "target": "dev",
+    "startedAt": "2026-05-05T07:18:34.394Z",
+    "durationMs": 4619,
+    "exitCode": 2,
+    "status": "failed",
+    "summary": "      in \"<unicode string>\", line 2, column 16",
+    "lines": [
+      {
+        "text": "07:18:36  Running with dbt=1.11.8",
+        "lineType": "info"
+      },
+      {
+        "text": "07:18:37  Registered adapter: athena=1.10.0",
+        "lineType": "info"
+      },
+      {
+        "text": "07:18:37  Encountered an error:",
+        "lineType": "error"
+      },
+      {
+        "text": "Parsing Error",
+        "lineType": "error"
+      },
+      {
+        "text": "  Error reading mursion_dbt_athena: marts/schema.yml - Runtime Error",
+        "lineType": "error"
+      },
+      {
+        "text": "    Syntax error near line 2",
+        "lineType": "error"
+      },
+      {
+        "text": "    ------------------------------",
+        "lineType": "info"
+      },
+      {
+        "text": "    1  | - name: test_model",
+        "lineType": "info"
+      },
+      {
+        "text": "    2  |     description: \"TODO: describe test_model\"",
+        "lineType": "info"
+      },
+      {
+        "text": "    3  |     columns:",
+        "lineType": "info"
+      },
+      {
+        "text": "    4  |       - name: id",
+        "lineType": "info"
+      },
+      {
+        "text": "    5  |         description: \"Primary key\"",
+        "lineType": "info"
+      },
+      {
+        "text": "    Raw Error:",
+        "lineType": "error"
+      },
+      {
+        "text": "    ------------------------------",
+        "lineType": "info"
+      },
+      {
+        "text": "    mapping values are not allowed in this context",
+        "lineType": "info"
+      },
+      {
+        "text": "      in \"<unicode string>\", line 2, column 16",
+        "lineType": "info"
+      }
+    ]
+  },
+  {
     "id": "run-1777551033053-feq9t",
     "command": "dbt run --select +m_skill_score_mindset",
     "target": "dev",

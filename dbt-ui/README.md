@@ -18,6 +18,7 @@ File explorer · Monaco editor · AI SQL assistant · Real-time command output �
    - [4c. Install Node dependencies](#4c-install-node-dependencies)
 5. [Configuration](#5-configuration)
    - [5a. Environment variables (.env.local)](#5a-environment-variables-envlocal)
+   - [First admin bootstrap](#first-admin-bootstrap)
    - [5b. dbt profiles.yml](#5b-dbt-profilesyml)
    - [5c. Athena settings in preview API](#5c-athena-settings-in-preview-api)
 6. [Running the App](#6-running-the-app)
@@ -284,6 +285,10 @@ AWS_DEFAULT_REGION=us-east-1
 > **Important:** After editing `.env.local`, always **restart `pnpm dev`**. Next.js reads environment variables only at server startup.
 
 > **Security:** `.env.local` is already listed in `.gitignore` — it is never committed.
+
+### First admin bootstrap
+
+When multi-user login is enabled (`DBT_UI_REQUIRE_LOGIN=true`), the **first** admin account is created at **`/login/admin`** only. That URL is **not** linked from the normal sign-in page (`/login`); use it once during deployment. The page checks `GET /api/register` and shows a closed state after any user exists. Logged-in users are redirected to the app if they open `/login/admin`.
 
 ---
 

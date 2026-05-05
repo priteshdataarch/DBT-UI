@@ -18,6 +18,7 @@ import SqlEditorPanel from '@/components/SqlEditorPanel';
 import GlobalSearch from '@/components/GlobalSearch';
 import MacrosPanel from '@/components/MacrosPanel';
 import type { FileNode, OpenFileTab, ChatMessage } from '@/types';
+import { setClientFileLockToken, getClientFileLockToken } from '@/lib/clientFileLockToken';
 import {
   Database,
   GitBranch,
@@ -40,6 +41,58 @@ function modelNameFromPath(p: string | null | undefined): string | null {
   if (!p) return null;
   const m = p.match(/([^/\\]+)\.sql$/);
   return m ? m[1] : null;
+}
+
+const FILE_LOCK_HEARTBEAT_MS = 42_000;
+
+type LockFields = Pick<OpenFileTab, 'baseMtimeMs' | 'lockToken' | 'lockBlockedBy' | 'fileLockBypass'>;
+
+/** Acquire or report lock after loading file metadata from GET /api/file. */
+async function fetchFileLockState(path: string, mtimeMs: number | null): Promise<LockFields> {
+  try {
+    const res = await fetch('/api/file/lock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    if (res.ok) {
+      const d = (await res.json()) as { bypass?: boolean; token?: string };
+      if (d.bypass) {
+        return {
+          baseMtimeMs: mtimeMs,
+          lockToken: null,
+          lockBlockedBy: null,
+          fileLockBypass: true,
+        };
+      }
+      if (d.token) {
+        setClientFileLockToken(path, d.token);
+        return {
+          baseMtimeMs: mtimeMs,
+          lockToken: d.token,
+          lockBlockedBy: null,
+          fileLockBypass: false,
+        };
+      }
+    }
+    if (res.status === 423) {
+      const d = (await res.json().catch(() => ({}))) as { lockedByEmail?: string };
+      return {
+        baseMtimeMs: mtimeMs,
+        lockToken: null,
+        lockBlockedBy: d.lockedByEmail ?? 'another user',
+        fileLockBypass: false,
+      };
+    }
+  } catch {
+    /* network — still open file */
+  }
+  return {
+    baseMtimeMs: mtimeMs,
+    lockToken: null,
+    lockBlockedBy: null,
+    fileLockBypass: false,
+  };
 }
 
 /** Project-wide only — used in the separate "All models" dropdown */
@@ -164,6 +217,7 @@ export default function Home() {
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
   const [outputOpen, setOutputOpen] = useState(false);
   const outputPanelRef = useRef<OutputPanelRef>(null);
+  const openTabsRef = useRef<OpenFileTab[]>([]);
   // Preview state
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -185,6 +239,8 @@ export default function Home() {
 
   const activeModel = modelNameFromPath(activeTab);
   const activeFileTab = openTabs.find((t) => t.path === activeTab);
+
+  openTabsRef.current = openTabs;
 
   /** Per-model run / test + graph selectors — left dropdown */
   const modelRunTestDropdownItems = useMemo(() => {
@@ -259,47 +315,124 @@ export default function Home() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [openTabs]);
 
+  // Refresh exclusive edit locks while tabs stay open (multi-user mode).
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      for (const t of openTabsRef.current) {
+        if (!t.lockToken || t.lockBlockedBy || t.fileLockBypass) continue;
+        void fetch('/api/file/lock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: t.path, token: t.lockToken }),
+        }).then((res) => {
+          if (res.status === 410) {
+            setOpenTabs((prev) =>
+              prev.map((tab) =>
+                tab.path === t.path
+                  ? {
+                      ...tab,
+                      lockToken: null,
+                      lockBlockedBy: 'Session lock expired — reopen this file to edit.',
+                    }
+                  : tab
+              )
+            );
+            setClientFileLockToken(t.path, null);
+          }
+        });
+      }
+    }, FILE_LOCK_HEARTBEAT_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
   // ── File operations ────────────────────────────────────────────────────────
+
+  const releaseLockRemote = useCallback(async (path: string, token: string | null) => {
+    if (!token) return;
+    try {
+      await fetch('/api/file/lock', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, token }),
+      });
+    } catch {
+      /* ignore */
+    }
+    setClientFileLockToken(path, null);
+  }, []);
 
   const openFile = useCallback(
     async (node: FileNode) => {
       if (node.type !== 'file') return;
       const existing = openTabs.find((t) => t.path === node.path);
-      if (existing) { setActiveTab(node.path); return; }
+      if (existing) {
+        setActiveTab(node.path);
+        return;
+      }
       try {
         const res = await fetch(`/api/file?path=${encodeURIComponent(node.path)}`);
         if (!res.ok) return;
-        const { content } = await res.json();
+        const data = (await res.json()) as { content: string; mtimeMs?: number };
+        const content = data.content;
+        const mtimeMs = typeof data.mtimeMs === 'number' ? data.mtimeMs : null;
         const ext = node.name.split('.').pop() ?? '';
         const language: OpenFileTab['language'] =
           ext === 'sql' ? 'sql' : ext === 'md' ? 'markdown' : ext === 'csv' ? 'csv' : 'yaml';
+        const lock = await fetchFileLockState(node.path, mtimeMs);
         setOpenTabs((prev) => [
           ...prev,
-          { path: node.path, name: node.name, content, isDirty: false, language },
+          {
+            path: node.path,
+            name: node.name,
+            content,
+            isDirty: false,
+            language,
+            ...lock,
+          },
         ]);
         setActiveTab(node.path);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     },
     [openTabs]
   );
 
   const openFileByPath = useCallback(
     async (filePath: string) => {
-      // filePath from manifest is relative to DBT_ROOT — resolve to an API-accessible path
       const name = filePath.split('/').pop() ?? filePath;
       const ext = name.split('.').pop() ?? '';
       const language: OpenFileTab['language'] =
         ext === 'sql' ? 'sql' : ext === 'md' ? 'markdown' : ext === 'csv' ? 'csv' : 'yaml';
       const existing = openTabs.find((t) => t.path === filePath || t.name === name);
-      if (existing) { setActiveTab(existing.path); setShowGlobalSearch(false); return; }
+      if (existing) {
+        setActiveTab(existing.path);
+        setShowGlobalSearch(false);
+        return;
+      }
       try {
         const res = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
         if (!res.ok) return;
-        const { content } = await res.json();
-        setOpenTabs((prev) => [...prev, { path: filePath, name, content, isDirty: false, language }]);
+        const data = (await res.json()) as { content: string; mtimeMs?: number };
+        const content = data.content;
+        const mtimeMs = typeof data.mtimeMs === 'number' ? data.mtimeMs : null;
+        const lock = await fetchFileLockState(filePath, mtimeMs);
+        setOpenTabs((prev) => [
+          ...prev,
+          {
+            path: filePath,
+            name,
+            content,
+            isDirty: false,
+            language,
+            ...lock,
+          },
+        ]);
         setActiveTab(filePath);
         setShowGlobalSearch(false);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     },
     [openTabs]
   );
@@ -313,20 +446,25 @@ export default function Home() {
         );
         if (!ok) return;
       }
-      setOpenTabs((prev) => {
-        const idx = prev.findIndex((t) => t.path === path);
-        const next = prev.filter((t) => t.path !== path);
-        if (activeTab === path)
-          setActiveTab(next.length > 0 ? next[Math.min(idx, next.length - 1)].path : null);
-        return next;
-      });
+      void (async () => {
+        if (tab?.lockToken) await releaseLockRemote(path, tab.lockToken);
+        setOpenTabs((prev) => {
+          const idx = prev.findIndex((t) => t.path === path);
+          const next = prev.filter((t) => t.path !== path);
+          if (activeTab === path)
+            setActiveTab(next.length > 0 ? next[Math.min(idx, next.length - 1)].path : null);
+          return next;
+        });
+      })();
     },
-    [activeTab, openTabs]
+    [activeTab, openTabs, releaseLockRemote]
   );
 
   const handleFileDeleted = useCallback(
     (path: string) => {
       setTreeRefreshKey((k) => k + 1);
+      const tab = openTabs.find((t) => t.path === path);
+      if (tab?.lockToken) setClientFileLockToken(path, null);
       setOpenTabs((prev) => {
         const idx = prev.findIndex((t) => t.path === path);
         if (idx === -1) return prev;
@@ -337,19 +475,37 @@ export default function Home() {
         return next;
       });
     },
-    [activeTab]
+    [activeTab, openTabs]
   );
 
   const handleFileRenamed = useCallback(
     (oldPath: string, newPath: string) => {
-      setTreeRefreshKey((k) => k + 1);
-      const name = newPath.split('/').pop() ?? newPath;
-      setOpenTabs((prev) =>
-        prev.map((t) => (t.path === oldPath ? { ...t, path: newPath, name } : t))
-      );
-      if (activeTab === oldPath) setActiveTab(newPath);
+      void (async () => {
+        setTreeRefreshKey((k) => k + 1);
+        const name = newPath.split('/').pop() ?? newPath;
+        const tab = openTabs.find((t) => t.path === oldPath);
+        if (tab?.lockToken) await releaseLockRemote(oldPath, tab.lockToken);
+
+        let mtimeMs: number | null = null;
+        try {
+          const r = await fetch(`/api/file?path=${encodeURIComponent(newPath)}`);
+          if (r.ok) {
+            const d = (await r.json()) as { mtimeMs?: number };
+            mtimeMs = typeof d.mtimeMs === 'number' ? d.mtimeMs : null;
+          }
+        } catch {
+          /* ignore */
+        }
+
+        const lock = await fetchFileLockState(newPath, mtimeMs);
+
+        setOpenTabs((prev) =>
+          prev.map((t) => (t.path === oldPath ? { ...t, path: newPath, name, ...lock } : t))
+        );
+        if (activeTab === oldPath) setActiveTab(newPath);
+      })();
     },
-    [activeTab]
+    [activeTab, openTabs, releaseLockRemote]
   );
 
   const updateTabContent = useCallback((path: string, content: string) => {
@@ -361,13 +517,45 @@ export default function Home() {
   const saveFile = useCallback(
     async (path: string) => {
       const tab = openTabs.find((t) => t.path === path);
-      if (!tab) return;
-      await fetch('/api/file', {
+      if (!tab || tab.lockBlockedBy) return;
+      const lockToken = tab.lockToken ?? getClientFileLockToken(path);
+      const payload: Record<string, unknown> = {
+        path,
+        content: tab.content,
+      };
+      if (lockToken) payload.lockToken = lockToken;
+      if (tab.baseMtimeMs != null) payload.baseMtimeMs = tab.baseMtimeMs;
+
+      const res = await fetch('/api/file', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, content: tab.content }),
+        body: JSON.stringify(payload),
       });
-      setOpenTabs((prev) => prev.map((t) => (t.path === path ? { ...t, isDirty: false } : t)));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        mtimeMs?: number;
+      };
+      if (res.status === 409) {
+        window.alert(
+          data.error ??
+            'This file changed on disk since you opened it. Reload the file before saving again.'
+        );
+        return;
+      }
+      if (res.status === 423) {
+        window.alert(data.error ?? 'You no longer hold the edit lock for this file.');
+        return;
+      }
+      if (!res.ok) {
+        window.alert(data.error ?? 'Save failed.');
+        return;
+      }
+      const nextMtime = typeof data.mtimeMs === 'number' ? data.mtimeMs : tab.baseMtimeMs;
+      setOpenTabs((prev) =>
+        prev.map((t) =>
+          t.path === path ? { ...t, isDirty: false, baseMtimeMs: nextMtime ?? t.baseMtimeMs } : t
+        )
+      );
     },
     [openTabs]
   );
@@ -389,13 +577,25 @@ export default function Home() {
       const name = sqlPath.split('/').pop() ?? '';
       const res = await fetch(`/api/file?path=${encodeURIComponent(sqlPath)}`);
       if (!res.ok) return;
-      const { content } = await res.json();
+      const data = (await res.json()) as { content: string; mtimeMs?: number };
+      const content = data.content;
+      const mtimeMs = typeof data.mtimeMs === 'number' ? data.mtimeMs : null;
+      const lock = await fetchFileLockState(sqlPath, mtimeMs);
       setOpenTabs((prev) => [
         ...prev,
-        { path: sqlPath, name, content, isDirty: false, language: 'sql' },
+        {
+          path: sqlPath,
+          name,
+          content,
+          isDirty: false,
+          language: 'sql' as const,
+          ...lock,
+        },
       ]);
       setActiveTab(sqlPath);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   // ── dbt commands ───────────────────────────────────────────────────────────
@@ -860,25 +1060,39 @@ export default function Home() {
           onCreated={async (filePath) => {
             setTreeRefreshKey((k) => k + 1);
             setShowSourceModal(false);
-            // Refresh the tab in-place if it's already open, or open it fresh
             try {
               const res = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
               if (!res.ok) return;
-              const { content } = await res.json();
+              const data = (await res.json()) as { content: string; mtimeMs?: number };
+              const content = data.content;
+              const mtimeMs = typeof data.mtimeMs === 'number' ? data.mtimeMs : null;
               const name = filePath.split('/').pop() ?? filePath;
+              const lock = await fetchFileLockState(filePath, mtimeMs);
               setOpenTabs((prev) => {
                 const existing = prev.find((t) => t.path === filePath);
                 if (existing) {
-                  // Silently update content and clear dirty flag
                   return prev.map((t) =>
-                    t.path === filePath ? { ...t, content, isDirty: false } : t
+                    t.path === filePath
+                      ? { ...t, content, isDirty: false, baseMtimeMs: mtimeMs ?? t.baseMtimeMs }
+                      : t
                   );
                 }
-                // Not open yet — open it as a new tab
-                return [...prev, { path: filePath, name, content, isDirty: false, language: 'yaml' as const }];
+                return [
+                  ...prev,
+                  {
+                    path: filePath,
+                    name,
+                    content,
+                    isDirty: false,
+                    language: 'yaml' as const,
+                    ...lock,
+                  },
+                ];
               });
               setActiveTab(filePath);
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
           }}
         />
       )}
@@ -892,16 +1106,37 @@ export default function Home() {
             try {
               const res = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
               if (!res.ok) return;
-              const { content } = await res.json();
+              const data = (await res.json()) as { content: string; mtimeMs?: number };
+              const content = data.content;
+              const mtimeMs = typeof data.mtimeMs === 'number' ? data.mtimeMs : null;
               const name = filePath.split('/').pop() ?? filePath;
+              const lang: OpenFileTab['language'] = filePath.endsWith('.csv') ? 'csv' : 'yaml';
+              const lock = await fetchFileLockState(filePath, mtimeMs);
               setOpenTabs((prev) => {
                 const existing = prev.find((t) => t.path === filePath);
-                if (existing) return prev.map((t) => t.path === filePath ? { ...t, content, isDirty: false } : t);
-                const lang: OpenFileTab['language'] = filePath.endsWith('.csv') ? 'csv' : 'yaml';
-                return [...prev, { path: filePath, name, content, isDirty: false, language: lang }];
+                if (existing) {
+                  return prev.map((t) =>
+                    t.path === filePath
+                      ? { ...t, content, isDirty: false, baseMtimeMs: mtimeMs ?? t.baseMtimeMs }
+                      : t
+                  );
+                }
+                return [
+                  ...prev,
+                  {
+                    path: filePath,
+                    name,
+                    content,
+                    isDirty: false,
+                    language: lang,
+                    ...lock,
+                  },
+                ];
               });
               setActiveTab(filePath);
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
           }}
         />
       )}

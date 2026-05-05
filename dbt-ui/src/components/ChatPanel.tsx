@@ -99,7 +99,11 @@ function SchemaChunksPanel({ chunks }: { chunks: string[] }) {
               key={i}
               className="p-2 text-[10px] font-mono text-[#8b8b8b] bg-[#1a1a1a] whitespace-pre-wrap overflow-x-auto leading-relaxed"
             >
-              {chunk}
+              {typeof chunk === 'string'
+                ? chunk
+                : chunk != null && typeof chunk === 'object' && 'text' in chunk
+                  ? String((chunk as { text: string }).text)
+                  : String(chunk)}
             </pre>
           ))}
         </div>

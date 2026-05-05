@@ -25,6 +25,16 @@ function registrationErrorMessage(e: unknown): string {
   return 'Registration failed — check the server terminal for details.';
 }
 
+/** Whether first-admin bootstrap is still allowed (no auth). */
+export async function GET() {
+  try {
+    const count = await prisma.user.count();
+    return NextResponse.json({ bootstrapOpen: count === 0 });
+  } catch {
+    return NextResponse.json({ bootstrapOpen: false, error: 'database_unavailable' }, { status: 503 });
+  }
+}
+
 /** Bootstrap the first admin user (no session required). Disabled once any user exists. */
 export async function POST(req: NextRequest) {
   try {

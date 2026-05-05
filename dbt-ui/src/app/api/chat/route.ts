@@ -116,6 +116,46 @@ function extractCoreClauses(sql: string): string {
   return [selectMatch, whereMatch, groupMatch, orderMatch].join('\n');
 }
 
+/** Athena / Trino identifiers that are functions or keywords, not model columns (avoid false validation errors). */
+const SQL_BUILTIN_IDENTIFIERS = new Set([
+  'date_add',
+  'date_diff',
+  'date_trunc',
+  'date_format',
+  'current_date',
+  'current_timestamp',
+  'current_time',
+  'localtime',
+  'localtimestamp',
+  'from_unixtime',
+  'to_unixtime',
+  'parse_datetime',
+  'format_datetime',
+  'extract',
+  'interval',
+  'cast',
+  'try_cast',
+  'substr',
+  'substring',
+  'length',
+  'trim',
+  'ltrim',
+  'rtrim',
+  'replace',
+  'split_part',
+  'regexp_extract',
+  'regexp_like',
+  'regexp_replace',
+  'nullif',
+  'greatest',
+  'least',
+  'approx_percentile',
+  'percentile',
+  'stddev',
+  'variance',
+  'corr',
+]);
+
 function extractUnqualifiedColumns(sql: string): Set<string> {
   const normalized = normalizeSqlForParsing(sql);
   const selectPart = normalized.match(/\bselect\b([\s\S]*?)\bfrom\b/i)?.[1] ?? '';
@@ -148,7 +188,13 @@ function extractUnqualifiedColumns(sql: string): Set<string> {
   let m: RegExpExecArray | null;
   while ((m = tokenRe.exec(noQualified)) !== null) {
     const t = m[0].toLowerCase();
-    if (!reserved.has(t) && !aliasTokens.has(t) && !/^\d+$/.test(t)) cols.add(t);
+    if (
+      !reserved.has(t) &&
+      !SQL_BUILTIN_IDENTIFIERS.has(t) &&
+      !aliasTokens.has(t) &&
+      !/^\d+$/.test(t)
+    )
+      cols.add(t);
   }
   return cols;
 }
@@ -579,10 +625,14 @@ Coverage report from user intent:
       }
     }
 
+    const chunksForClient = (schemaChunks ?? []).map((c) =>
+      typeof c === 'string' ? c : c.text
+    );
+
     return NextResponse.json({
       message: finalMessage,
       sources,
-      schemaChunks: schemaChunks ?? [],
+      schemaChunks: chunksForClient,
       mode,
       catalogAvailable,
     });

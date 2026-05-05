@@ -7,12 +7,20 @@ export default auth((req) => {
   }
 
   const { pathname } = req.nextUrl;
+
+  if (pathname === '/login/admin') {
+    if (req.auth) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith('/api/auth') || pathname === '/login') {
     return NextResponse.next();
   }
 
-  // First admin bootstrap (handled in route — rejects once users exist)
-  if (pathname === '/api/register' && req.method === 'POST') {
+  // First admin bootstrap: GET status + POST register (route rejects once users exist)
+  if (pathname === '/api/register') {
     return NextResponse.next();
   }
 
