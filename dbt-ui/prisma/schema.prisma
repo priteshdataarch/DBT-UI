@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum TeamRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  teamMembers  TeamMember[]
+  schedules    Schedule[]   @relation("ScheduleCreatedBy")
+}
+
+model Team {
+  id        String       @id @default(cuid())
+  name      String
+  createdAt DateTime     @default(now())
+  members   TeamMember[]
+  schedules Schedule[]
+}
+
+model TeamMember {
+  id     String   @id @default(cuid())
+  teamId String
+  userId String
+  role   TeamRole @default(VIEWER)
+  team   Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+model Schedule {
+  id          String    @id @default(cuid())
+  teamId      String
+  name        String
+  cronExpr    String
+  timezone    String    @default("UTC")
+  enabled     Boolean   @default(true)
+  dbtTarget   String    @default("dev")
+  command     String    @default("run")
+  selectArg   String?
+  lastRunAt   DateTime?
+  createdById String?
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy   User?     @relation("ScheduleCreatedBy", fields: [createdById], references: [id])
+  logs        ScheduleRunLog[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ScheduleRunLog {
+  id         String    @id @default(cuid())
+  scheduleId String
+  schedule   Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  exitCode   Int?
+  summary    String?
+}

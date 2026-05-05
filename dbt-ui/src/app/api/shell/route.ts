@@ -1,6 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import { DBT_ROOT } from '@/lib/fileSystem';
+import { requireEditor } from '@/lib/apiAuth';
 
 type LineType = 'info' | 'success' | 'error' | 'warning';
 
@@ -18,6 +19,9 @@ function classifyLine(text: string, isStderr: boolean): LineType {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireEditor();
+  if (gate instanceof NextResponse) return gate;
+
   const { command } = (await req.json()) as { command?: string };
   const line = command?.trim() ?? '';
   if (!line) {

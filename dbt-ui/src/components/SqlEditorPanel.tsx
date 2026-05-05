@@ -19,7 +19,11 @@ import {
   Sparkles,
   Clock,
   Trash2,
+  Plus,
+  FilePlus,
 } from 'lucide-react';
+
+import CreateModelModal from '@/components/CreateModelModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -55,6 +59,16 @@ const ROW_LIMIT_OPTIONS: { label: string; value: RowLimit }[] = [
   { label: '5 000 rows', value: 5000 },
   { label: 'No limit',  value: -1 },
 ];
+
+type SqlEditorTab = { id: string; label: string; sql: string };
+
+function createSqlTab(order: number, sqlText: string): SqlEditorTab {
+  const id =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `sql-tab-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return { id, label: `Query ${order}`, sql: sqlText };
+}
 
 // ─── Query history (localStorage) ────────────────────────────────────────────
 
@@ -340,10 +354,27 @@ function QueryInfoPanel({ result, state }: { result: QueryResponse | null; state
 
 interface Props {
   onClose: () => void;
+  /** After creating a model from the query editor, open it in the main IDE. */
+  onModelCreated?: (path: string) => void;
 }
 
-export default function SqlEditorPanel({ onClose }: Props) {
-  const [sql, setSql]                   = useState('SELECT * FROM f_score LIMIT 100');
+export default function SqlEditorPanel({ onClose, onModelCreated }: Props) {
+  const [editorTabs, setEditorTabs] = useState<SqlEditorTab[]>(() => [
+    createSqlTab(1, 'SELECT * FROM f_score LIMIT 100'),
+  ]);
+  const [activeEditTabId, setActiveEditTabId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeEditTabId === null && editorTabs[0]) {
+      setActiveEditTabId(editorTabs[0].id);
+    }
+  }, [activeEditTabId, editorTabs]);
+
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createModalSeedSql, setCreateModalSeedSql] = useState<string | null>(null);
+  const [createModalKey, setCreateModalKey] = useState(0);
+  const [queryToast, setQueryToast] = useState<string | null>(null);
+
   const [queryState, setQueryState]     = useState<QueryState>('idle');
   const [result, setResult]             = useState<QueryResponse | null>(null);
   const [errorMsg, setErrorMsg]         = useState<string | null>(null);
@@ -352,10 +383,59 @@ export default function SqlEditorPanel({ onClose }: Props) {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [rowLimit, setRowLimit]         = useState<RowLimit>(100);
 
+  const activeSqlTab = useMemo(
+    () => editorTabs.find((t) => t.id === activeEditTabId) ?? editorTabs[0]!,
+    [editorTabs, activeEditTabId]
+  );
+
+  const updateActiveSql = useCallback((value: string) => {
+    if (!activeEditTabId) return;
+    sqlRef.current = value;
+    setEditorTabs((prev) =>
+      prev.map((t) => (t.id === activeEditTabId ? { ...t, sql: value } : t))
+    );
+  }, [activeEditTabId]);
+
+  const addEditorTab = useCallback(() => {
+    const nextOrder = editorTabs.length + 1;
+    const tab = createSqlTab(nextOrder, '');
+    setEditorTabs((prev) => [...prev, tab]);
+    setActiveEditTabId(tab.id);
+    sqlRef.current = '';
+  }, [editorTabs.length]);
+
+  const closeEditorTab = useCallback(
+    (id: string) => {
+      if (editorTabs.length <= 1) return;
+      const idx = editorTabs.findIndex((t) => t.id === id);
+      if (idx === -1) return;
+      const next = editorTabs.filter((t) => t.id !== id);
+      setEditorTabs(next);
+      if (activeEditTabId === id) {
+        const fallback = next[Math.max(0, idx - 1)] ?? next[0]!;
+        setActiveEditTabId(fallback.id);
+        sqlRef.current = fallback.sql;
+      }
+    },
+    [editorTabs, activeEditTabId]
+  );
+
+  const openCreateModelFromQuery = useCallback(() => {
+    const q = activeSqlTab.sql.trim();
+    if (!q) {
+      setQueryToast('Add SQL to the current tab first.');
+      window.setTimeout(() => setQueryToast(null), 3500);
+      return;
+    }
+    setCreateModalSeedSql(q);
+    setCreateModalKey((k) => k + 1);
+    setCreateModalOpen(true);
+  }, [activeSqlTab.sql]);
+
   // Always-current refs — fixes stale closure in editor.addCommand
-  const sqlRef      = useRef(sql);
+  const sqlRef      = useRef(activeSqlTab.sql);
   const rowLimitRef = useRef(rowLimit);
-  sqlRef.current      = sql;
+  sqlRef.current      = activeSqlTab.sql;
   rowLimitRef.current = rowLimit;
 
   // Query history
@@ -523,6 +603,61 @@ export default function SqlEditorPanel({ onClose }: Props) {
         </button>
       </div>
 
+      {queryToast && (
+        <div className="shrink-0 px-4 py-1.5 text-center text-[11px] text-[#f48771] bg-[#f48771]/10 border-b border-[#f48771]/30">
+          {queryToast}
+        </div>
+      )}
+
+      <div className="flex items-center gap-0.5 px-2 h-9 bg-[#2d2d2d] border-b border-[#1e1e1e] shrink-0 overflow-x-auto">
+        {editorTabs.map((t) => (
+          <div
+            key={t.id}
+            role="tab"
+            tabIndex={0}
+            onClick={() => {
+              setActiveEditTabId(t.id);
+              sqlRef.current = t.sql;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setActiveEditTabId(t.id);
+                sqlRef.current = t.sql;
+              }
+            }}
+            className={`group flex items-center gap-0.5 max-w-[180px] shrink-0 rounded-t px-2.5 py-1 text-[11px] border border-b-0 cursor-pointer select-none ${
+              activeEditTabId === t.id
+                ? 'bg-[#1e1e1e] border-[#3e3e42] text-[#d4d4d4]'
+                : 'bg-transparent border-transparent text-[#8b8b8b] hover:text-[#d4d4d4]'
+            }`}
+          >
+            <span className="truncate">{t.label}</span>
+            {editorTabs.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeEditorTab(t.id);
+                }}
+                className="opacity-70 hover:opacity-100 p-0.5 rounded hover:bg-[#3e3e42] text-[#8b8b8b] shrink-0"
+                title="Close tab"
+              >
+                <X size={10} />
+              </button>
+            )}
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addEditorTab}
+          className="shrink-0 ml-0.5 p-1 rounded text-[#8b8b8b] hover:text-[#d4d4d4] hover:bg-[#3e3e42]"
+          title="New query tab"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+
       {/* ── Toolbar ───────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#1e1e1e] bg-[#2d2d2d] shrink-0">
         {queryState === 'running' ? (
@@ -567,12 +702,23 @@ export default function SqlEditorPanel({ onClose }: Props) {
         {/* AI Explain */}
         <button
           onClick={explainSql}
-          disabled={explaining || !sql.trim()}
+          disabled={explaining || !activeSqlTab.sql.trim()}
           className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded border border-[#7c3aed]/50 text-[#a78bfa] hover:bg-[#7c3aed]/10 disabled:opacity-40 transition-colors"
           title="Explain this SQL in plain English using AI"
         >
           {explaining ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
           Explain
+        </button>
+
+        <button
+          type="button"
+          onClick={openCreateModelFromQuery}
+          disabled={!activeSqlTab.sql.trim()}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded border border-[#0e639c]/50 text-[#4fc3f7] hover:bg-[#0e639c]/15 disabled:opacity-40 transition-colors"
+          title="Create a dbt model from the SQL in this tab (opens dialog)"
+        >
+          <FilePlus size={11} />
+          Create model
         </button>
 
         {result && result.rowCount > 0 && (
@@ -602,11 +748,12 @@ export default function SqlEditorPanel({ onClose }: Props) {
           {/* monaco */}
           <div className="h-[42%] border-b border-[#1e1e1e] shrink-0">
             <Editor
+              key={activeEditTabId ?? activeSqlTab.id}
               height="100%"
               defaultLanguage="sql"
               theme="vs-dark"
-              value={sql}
-              onChange={(v) => setSql(v ?? '')}
+              value={activeSqlTab.sql}
+              onChange={(v) => updateActiveSql(v ?? '')}
               onMount={handleEditorMount}
               options={{
                 minimap: { enabled: false },
@@ -734,7 +881,11 @@ export default function SqlEditorPanel({ onClose }: Props) {
                     {history.map((entry) => (
                       <button
                         key={entry.id}
-                        onClick={() => { setSql(entry.sql); setActiveTab('results'); }}
+                        onClick={() => {
+                          updateActiveSql(entry.sql);
+                          sqlRef.current = entry.sql;
+                          setActiveTab('results');
+                        }}
                         className="w-full text-left px-4 py-3 border-b border-[#1e1e1e] hover:bg-[#2a2d2e] transition-colors group"
                       >
                         <div className="flex items-center gap-2 mb-1">
@@ -762,6 +913,23 @@ export default function SqlEditorPanel({ onClose }: Props) {
           </div>
         </div>
       </div>
+
+      {createModalOpen && (
+        <CreateModelModal
+          key={createModalKey}
+          initialQuerySql={createModalSeedSql}
+          overlayZClass="z-[60]"
+          onClose={() => {
+            setCreateModalOpen(false);
+            setCreateModalSeedSql(null);
+          }}
+          onCreated={(path) => {
+            setCreateModalOpen(false);
+            setCreateModalSeedSql(null);
+            onModelCreated?.(path);
+          }}
+        />
+      )}
 
       {/* ── AI Explain drawer ─────────────────────────────── */}
       {showExplain && (

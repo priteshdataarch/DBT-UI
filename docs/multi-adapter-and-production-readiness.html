@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DBT-UI — Multi-adapter &amp; production readiness (assessment)</title>
+  <style>
+    :root { --ink: #1a1a1a; --muted: #444; --line: #ccc; --bg: #fff; --accent: #0e639c; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.55; color: var(--ink); background: var(--bg); max-width: 800px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; font-size: 11pt; }
+    h1 { font-size: 1.65rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.35rem; margin-top: 0; }
+    h2 { font-size: 1.2rem; margin-top: 1.75rem; color: var(--accent); }
+    h3 { font-size: 1rem; margin-top: 1.25rem; }
+    p, li { color: var(--ink); }
+    .muted { color: var(--muted); font-size: 0.95rem; }
+    .box { border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; margin: 1rem 0; background: #fafafa; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 10pt; }
+    th, td { border: 1px solid var(--line); padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
+    th { background: #f0f4f8; }
+    pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9.5pt; background: #f4f4f4; padding: 0.75rem 1rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+    ul { padding-left: 1.25rem; }
+    .yes { color: #0d6d2c; font-weight: 600; }
+    .partial { color: #856404; font-weight: 600; }
+    .no { color: #842029; font-weight: 600; }
+    .print-hint { margin-top: 2.5rem; padding: 1rem; background: #e8f4fc; border-radius: 6px; font-size: 10pt; }
+    @media print {
+      body { padding: 0; max-width: none; }
+      .print-hint { border: 1px dashed #999; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>DBT-UI — Multi-warehouse adapter &amp; production deployment</h1>
+  <p class="muted">Assessment document · Not an implementation commitment · Generated for planning</p>
+
+  <h2>1. Purpose</h2>
+  <p>This document explains whether DBT-UI can be standardized to work with <strong>any</strong> dbt adapter (e.g. dbt-snowflake, dbt-redshift, dbt-bigquery, dbt-athena), what is already generic, what is vendor-specific, and what a <strong>production-ready, Dockerized</strong> architecture would require.</p>
+
+  <h2>2. Executive summary</h2>
+  <div class="box">
+    <p><strong>dbt CLI execution (run, test, compile, docs, etc.)</strong> — <span class="yes">Already adapter-agnostic</span>. dbt reads <code>profiles.yml</code> and uses whichever adapter is installed in the environment. No code change is strictly required to switch from Athena to Snowflake <em>for dbt commands</em>, as long as the container or host has the right <code>pip install dbt-&lt;adapter&gt;</code> and valid profiles.</p>
+    <p><strong>SQL Editor &amp; “Preview data” (live SELECT against the warehouse)</strong> — <span class="partial">Currently coupled to AWS Athena</span> in a typical implementation (e.g. AWS SDK, Glue catalog, S3 query output). Making this work for Snowflake/Redshift/BigQuery is <span class="yes">possible</span> but requires <strong>new backend modules</strong> per engine (or a thin “query gateway” service), plus secrets and network design.</p>
+    <p><strong>Production Docker</strong> — <span class="yes">Possible and standard</span>: Next.js standalone image, mount or copy the dbt project, inject secrets via env/secrets manager, health checks, non-root user optional hardening. The prior exploratory Dockerfile/compose work was reverted per request; this document describes the target shape without shipping those files.</p>
+  </div>
+
+  <h2>3. Current logical architecture (high level)</h2>
+  <pre>
+┌─────────────────────────────────────────────────────────────────┐
+│                        Browser (DBT-UI)                          │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ HTTPS
+┌────────────────────────────▼────────────────────────────────────┐
+│              Next.js API routes (Node process)                   │
+│  · /api/dbt      → spawn("dbt", …)  [adapter from profiles/cli] │
+│  · /api/file     → project files on disk                         │
+│  · /api/git      → git CLI                                       │
+│  · /api/query    → optional: warehouse-specific SDK (Athena)   │
+│  · /api/preview  → optional: compiled SQL → warehouse (Athena) │
+│  · /api/chat     → OpenAI + catalog context                      │
+└──────┬───────────────────────────────┬──────────────────────────┘
+       │                               │
+       │ subprocess                    │ AWS SDK (if enabled)
+       ▼                               ▼
+┌──────────────┐              ┌──────────────────┐
+│  dbt CLI     │              │  AWS Athena      │
+│  (any        │              │  (today)         │
+│   adapter)   │              └──────────────────┘
+└──────────────┘
+       │
+       ▼
+┌──────────────┐
+│  Warehouse   │  ← Snowflake / Redshift / … via dbt profiles
+└──────────────┘
+  </pre>
+
+  <h2>4. Feasibility matrix</h2>
+  <table>
+    <thead>
+      <tr><th>Capability</th><th>Any dbt adapter?</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Run / test / compile / docs / lineage from manifest</td>
+        <td><span class="yes">Yes</span></td>
+        <td>Uses dbt subprocess + project files. Adapter is selected by <code>profiles.yml</code> + installed Python packages.</td>
+      </tr>
+      <tr>
+        <td>Environment switcher (<code>--target</code>)</td>
+        <td><span class="yes">Yes</span></td>
+        <td>dbt-native; profiles define outputs.</td>
+      </tr>
+      <tr>
+        <td>AI / RAG using <code>catalog.json</code></td>
+        <td><span class="yes">Yes</span></td>
+        <td>Adapter-agnostic metadata from dbt.</td>
+      </tr>
+      <tr>
+        <td>Ad-hoc SQL editor + result grid</td>
+        <td><span class="partial">Athena today</span></td>
+        <td>Needs per-warehouse driver/API (Snowflake connector, JDBC pool, BigQuery client, etc.).</td>
+      </tr>
+      <tr>
+        <td>Preview data (compiled model → SELECT)</td>
+        <td><span class="partial">Athena today</span></td>
+        <td>Same as above; must compile first in all cases.</td>
+      </tr>
+      <tr>
+        <td>Single Docker image: Node + dbt + adapter</td>
+        <td><span class="yes">Yes</span></td>
+        <td>Build ARG for <code>pip install dbt-snowflake</code> (etc.). Image size grows with native deps.</td>
+      </tr>
+      <tr>
+        <td>Secrets in production</td>
+        <td><span class="yes">Yes</span></td>
+        <td>Use K8s secrets, AWS Secrets Manager, env from orchestrator — never bake into image.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. What “standardize for any dbt” would require (engineering plan)</h2>
+  <h3>Phase A — Low effort (already aligned)</h3>
+  <ul>
+    <li>Keep all dbt invocations via CLI with explicit <code>--project-dir</code> / <code>--profiles-dir</code> / <code>--target</code>.</li>
+    <li>Document supported adapters and a single <code>DBT_ADAPTER_PACKAGE</code> (or multi-stage image) for Docker builds.</li>
+    <li>UI copy: refer to “warehouse” where behavior is not Athena-specific.</li>
+  </ul>
+
+  <h3>Phase B — Medium effort (optional live SQL)</h3>
+  <ul>
+    <li>Introduce <code>QUERY_ENGINE=athena|snowflake|none</code> (example) in server config.</li>
+    <li>Implement <code>/api/query</code> and <code>/api/preview</code> behind a strategy interface: <code>AthenaRunner</code>, <code>SnowflakeRunner</code>, …</li>
+    <li>Map env vars per engine (Snowflake: account, user, private key or password, role, warehouse, database, schema).</li>
+    <li>Security: parameterized execution only, read-only roles for preview, timeouts, row limits.</li>
+  </ul>
+
+  <h3>Phase C — Production hardening</h3>
+  <ul>
+    <li>Next.js <code>output: 'standalone'</code> for minimal runtime image.</li>
+    <li>Non-root user, read-only root FS where possible, tmpfs for caches.</li>
+    <li>Health endpoint (e.g. <code>GET /api/health</code>) and readiness checks.</li>
+    <li>Mount dbt project as volume for live edits, or bake for immutable deploys.</li>
+    <li>Reverse proxy (TLS), rate limits, auth in front of the studio if exposed beyond VPN.</li>
+  </ul>
+
+  <h2>6. Risks and constraints</h2>
+  <ul>
+    <li><strong>Credentials</strong>: The server runs dbt and optional queries; it must hold warehouse credentials in memory or delegate to OIDC/workload identity — design carefully.</li>
+    <li><strong>Shell / arbitrary commands</strong>: If exposed, treat as admin-only or disable in production.</li>
+    <li><strong>Adapter-specific SQL</strong>: dbt models are still warehouse SQL dialects; the IDE does not magically translate dialects.</li>
+    <li><strong>Licensing</strong>: Some JDBC/ODBC drivers have license terms separate from dbt.</li>
+  </ul>
+
+  <h2>7. Conclusion</h2>
+  <p><strong>Using DBT-UI with any dbt adapter for core dbt workflows is already possible</strong> with the right Python environment and <code>profiles.yml</code>. <strong>Fully adapter-neutral “live SQL” and preview</strong> is <strong>possible but not automatic</strong>: it is a deliberate second product surface (multi-driver query layer) on top of the existing dbt-centric design.</p>
+  <p><strong>Docker / Kubernetes production deployment</strong> is standard practice and <strong>feasible</strong>; the main decisions are image layout (dbt in-image vs sidecar), secret injection, and whether the SQL editor is enabled for your warehouse.</p>
+
+  <div class="print-hint">
+    <strong>Save as PDF:</strong> Open this file in Chrome or Edge → <kbd>Ctrl</kbd>+<kbd>P</kbd> (Windows) or <kbd>Cmd</kbd>+<kbd>P</kbd> (Mac) → choose <strong>Save as PDF</strong> → Save.
+  </div>
+
+</body>
+</html>

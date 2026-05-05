@@ -18,6 +18,10 @@ interface Props {
   onFileOpen: (node: FileNode) => void;
   refreshKey: number;
   activeFilePath: string | null;
+  /** If the file is open with unsaved changes, delete will ask to discard first. */
+  isFileDirty?: (path: string) => boolean;
+  onFileDeleted?: (path: string) => void;
+  onFileRenamed?: (oldPath: string, newPath: string) => void;
 }
 
 function FileIcon({ name }: { name: string }) {
@@ -52,11 +56,19 @@ interface TreeNodeProps {
   node: FileNode;
   depth: number;
   onFileOpen: (node: FileNode) => void;
+  onFileContextMenu?: (e: React.MouseEvent, node: FileNode) => void;
   activeFilePath: string | null;
   defaultOpen?: boolean;
 }
 
-function TreeNode({ node, depth, onFileOpen, activeFilePath, defaultOpen = false }: TreeNodeProps) {
+function TreeNode({
+  node,
+  depth,
+  onFileOpen,
+  onFileContextMenu,
+  activeFilePath,
+  defaultOpen = false,
+}: TreeNodeProps) {
   const [expanded, setExpanded] = useState(defaultOpen || depth < 1);
   const isActive = node.type === 'file' && node.path === activeFilePath;
 
@@ -83,6 +95,7 @@ function TreeNode({ node, depth, onFileOpen, activeFilePath, defaultOpen = false
               node={child}
               depth={depth + 1}
               onFileOpen={onFileOpen}
+              onFileContextMenu={onFileContextMenu}
               activeFilePath={activeFilePath}
             />
           ))}
@@ -97,6 +110,11 @@ function TreeNode({ node, depth, onFileOpen, activeFilePath, defaultOpen = false
       }`}
       style={{ paddingLeft: `${depth * 14 + 20}px` }}
       onClick={() => onFileOpen(node)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onFileContextMenu?.(e, node);
+      }}
       title={node.path}
     >
       <FileIcon name={node.name} />
@@ -105,11 +123,24 @@ function TreeNode({ node, depth, onFileOpen, activeFilePath, defaultOpen = false
   );
 }
 
-export default function FileExplorer({ onFileOpen, refreshKey, activeFilePath }: Props) {
+type CtxMenu = { x: number; y: number; node: FileNode } | null;
+
+export default function FileExplorer({
+  onFileOpen,
+  refreshKey,
+  activeFilePath,
+  isFileDirty,
+  onFileDeleted,
+  onFileRenamed,
+}: Props) {
   const [tree, setTree] = useState<FileNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const treeRef = useRef<string>(''); // serialised tree for change detection
+  const [ctxMenu, setCtxMenu] = useState<CtxMenu>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
 
   const fetchTree = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -141,6 +172,88 @@ export default function FileExplorer({ onFileOpen, refreshKey, activeFilePath }:
     return () => clearInterval(id);
   }, [fetchTree]);
 
+  // Close context menu: outside click, Escape, scroll
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      closeCtxMenu();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeCtxMenu();
+    };
+    const onScroll = () => closeCtxMenu();
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown, true);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [ctxMenu, closeCtxMenu]);
+
+  const handleFileContextMenu = useCallback((e: React.MouseEvent, node: FileNode) => {
+    if (node.type !== 'file') return;
+    setCtxMenu({ x: e.clientX, y: e.clientY, node });
+  }, []);
+
+  const runDelete = async (path: string, name: string) => {
+    if (isFileDirty?.(path)) {
+      const ok = window.confirm(
+        `"${name}" has unsaved changes.\n\nDelete file from disk and discard editor changes?`
+      );
+      if (!ok) return;
+    } else {
+      const ok = window.confirm(`Delete "${name}"?\n\nThis cannot be undone.`);
+      if (!ok) return;
+    }
+    try {
+      const res = await fetch(`/api/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        window.alert((data as { error?: string }).error ?? `Delete failed (${res.status})`);
+        return;
+      }
+      closeCtxMenu();
+      onFileDeleted?.(path);
+    } catch {
+      window.alert('Delete failed (network error)');
+    }
+  };
+
+  const runRename = async (path: string, currentName: string) => {
+    const next = window.prompt('New file name (same extension)', currentName);
+    if (next == null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === currentName) {
+      closeCtxMenu();
+      return;
+    }
+    if (trimmed.includes('/') || trimmed.includes('\\')) {
+      window.alert('Use a file name only, no path separators.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/file', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, newName: trimmed }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; newPath?: string };
+      if (!res.ok) {
+        window.alert(data.error ?? `Rename failed (${res.status})`);
+        return;
+      }
+      if (data.newPath) {
+        closeCtxMenu();
+        onFileRenamed?.(path, data.newPath);
+      }
+    } catch {
+      window.alert('Rename failed (network error)');
+    }
+  };
+
   return (
     <div className="w-full h-full bg-[#252526] border-r border-[#3e3e42] flex flex-col overflow-hidden">
       {/* Header */}
@@ -171,6 +284,7 @@ export default function FileExplorer({ onFileOpen, refreshKey, activeFilePath }:
               node={node}
               depth={0}
               onFileOpen={onFileOpen}
+              onFileContextMenu={handleFileContextMenu}
               activeFilePath={activeFilePath}
               defaultOpen={node.name === 'models'}
             />
@@ -191,6 +305,34 @@ export default function FileExplorer({ onFileOpen, refreshKey, activeFilePath }:
           </p>
         )}
       </div>
+
+      {ctxMenu && ctxMenu.node.type === 'file' && (
+        <div
+          ref={menuRef}
+          role="menu"
+          className="fixed z-[10000] min-w-[140px] rounded border border-[#3e3e42] bg-[#252526] py-0.5 shadow-xl text-xs"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="block w-full px-3 py-1.5 text-left text-[#d4d4d4] hover:bg-[#3e3e42]"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => runRename(ctxMenu.node.path, ctxMenu.node.name)}
+          >
+            Rename…
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="block w-full px-3 py-1.5 text-left text-[#f48771] hover:bg-[#3e3e42]"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => runDelete(ctxMenu.node.path, ctxMenu.node.name)}
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }

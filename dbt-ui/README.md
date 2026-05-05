@@ -552,6 +552,8 @@ lsof -ti :3001 | xargs kill -9
 | `/api/file` | `GET` | Read file content or list directory (`?list=path`) |
 | `/api/file` | `PUT` | Update an existing file; auto-commits to Git on save |
 | `/api/file` | `POST` | Create a new file; auto-commits to Git on save |
+| `/api/file` | `DELETE` | Delete a file (`?path=…`); editor role required |
+| `/api/file` | `PATCH` | Rename a file (`{ path, newName }` basename, same extension); editor role required |
 | `/api/tree` | `GET` | Returns filtered file tree (hides `target/`, `logs/`, config files) |
 | `/api/lineage` | `GET` | Parses `manifest.json`, returns DAG nodes and edges with topological levels |
 | `/api/preview` | `POST` | Runs `SELECT * LIMIT 100` on the active model via Athena SDK |

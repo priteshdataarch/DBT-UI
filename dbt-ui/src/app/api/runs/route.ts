@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { requireEditor, requireReader } from '@/lib/apiAuth';
 
 const DBT_ROOT = process.env.DBT_PROJECT_ROOT
   ? path.resolve(process.env.DBT_PROJECT_ROOT)
@@ -42,12 +43,18 @@ async function writeRuns(runs: RunEntry[]): Promise<void> {
 
 // GET /api/runs — return stored run history
 export async function GET(): Promise<NextResponse> {
+  const gate = await requireReader();
+  if (gate instanceof NextResponse) return gate;
+
   const runs = await readRuns();
   return NextResponse.json(runs);
 }
 
 // POST /api/runs — append a new run entry
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const gate = await requireEditor();
+  if (gate instanceof NextResponse) return gate;
+
   try {
     const entry = await req.json() as RunEntry;
     if (!entry.id || !entry.command) {
@@ -65,6 +72,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 // DELETE /api/runs — clear all history
 export async function DELETE(): Promise<NextResponse> {
+  const gate = await requireEditor();
+  if (gate instanceof NextResponse) return gate;
+
   try {
     await writeRuns([]);
     return NextResponse.json({ ok: true });

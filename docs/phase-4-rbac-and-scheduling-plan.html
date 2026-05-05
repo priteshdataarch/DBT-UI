@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DBT-UI Phase 4 — Multi-User / RBAC / Teams &amp; Scheduled dbt Jobs</title>
+  <style>
+    :root { --ink: #111; --muted: #444; --line: #ccc; --bg: #fff; --accent: #0e639c; --box: #f7f9fc; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.5; color: var(--ink); background: var(--bg); max-width: 820px; margin: 0 auto; padding: 2rem 1.25rem 3rem; font-size: 11pt; }
+    h1 { font-size: 1.5rem; border-bottom: 3px solid var(--accent); padding-bottom: 0.35rem; margin-top: 0; }
+    h2 { font-size: 1.15rem; margin-top: 1.6rem; color: var(--accent); page-break-after: avoid; }
+    h3 { font-size: 1rem; margin-top: 1.1rem; page-break-after: avoid; }
+    p, li { color: var(--ink); }
+    .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.5rem; }
+    .box { border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; margin: 0.9rem 0; background: var(--box); }
+    table { width: 100%; border-collapse: collapse; margin: 0.85rem 0; font-size: 10pt; page-break-inside: avoid; }
+    th, td { border: 1px solid var(--line); padding: 0.4rem 0.55rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f8; }
+    pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 9pt; background: #f0f0f0; padding: 0.65rem 0.85rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; margin: 0.75rem 0; }
+    ul { padding-left: 1.2rem; }
+    code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; background: #eee; padding: 0.08em 0.35em; border-radius: 3px; }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { padding: 0.2rem 0 0.2rem 1.4rem; position: relative; }
+    .checklist li::before { content: "☐"; position: absolute; left: 0; }
+    .footer { margin-top: 2rem; padding: 1rem; background: #e8f4fc; border-radius: 6px; font-size: 10pt; border: 1px solid #b8d4ee; }
+    @media print {
+      body { padding: 0.5in; max-width: none; }
+      h2 { break-after: avoid; }
+      .footer { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>DBT-UI — Phase 4 Plan</h1>
+  <p class="subtitle"><strong>Scope:</strong> (1) Multi-user / RBAC / team management &nbsp;·&nbsp; (3) Scheduled job orchestration (cron-based dbt runs)<br />
+  <strong>Document type:</strong> Requirements, dependencies, architecture, execution order — for engineering and stakeholder review.</p>
+
+  <div class="box">
+    <strong>How to get one PDF:</strong> Open this file in <strong>Chrome</strong> or <strong>Edge</strong> → press <kbd>Ctrl</kbd>+<kbd>P</kbd> (Windows) or <kbd>Cmd</kbd>+<kbd>P</kbd> (Mac) → set <strong>Destination: Save as PDF</strong> → Save. That produces a single PDF containing everything below.
+  </div>
+
+  <h2>1. Guiding principles</h2>
+  <ul>
+    <li><strong>dbt execution</strong> remains: project on disk + <code>profiles.yml</code> + subprocess (same as today). New layers add <strong>identity</strong>, <strong>authorization</strong>, and <strong>scheduling</strong> around that.</li>
+    <li><strong>Real multi-user RBAC</strong> implies a <strong>persistent store</strong> for users, teams, roles, and optionally audit — not only HTTP headers or a shared API key.</li>
+    <li><strong>Cron inside the Next.js server only</strong> is easy to ship but weak for HA and long runs; production should prefer a <strong>dedicated worker</strong> and a <strong>queue</strong>.</li>
+  </ul>
+
+  <h2>2. Workstream A — Multi-user / RBAC / team management</h2>
+
+  <h3>2.1 Goals</h3>
+  <ul>
+    <li>Multiple <strong>authenticated users</strong> (password, magic link, or SSO).</li>
+    <li><strong>Teams</strong> (or organizations) with <strong>members</strong> and <strong>roles</strong> (e.g. <code>owner</code>, <code>admin</code>, <code>developer</code>, <code>viewer</code>).</li>
+    <li><strong>RBAC</strong>: enforce what each role may do (view project, edit files, run dbt, git push, change target, manage schedules, invite users).</li>
+    <li>Optional: <strong>audit log</strong> (who did what, when).</li>
+  </ul>
+
+  <h3>2.2 Architecture (conceptual)</h3>
+  <pre>┌──────────────┐     ┌─────────────────────────┐     ┌─────────────────────┐
+│   Browser    │────▶│  Next.js (App Router)    │────▶│  Application DB     │
+│  Login / SSO │     │  Auth session + RBAC     │     │  users, teams,      │
+└──────────────┘     │  Middleware on /api/*    │     │  memberships, audit │
+                     └────────────┬────────────┘     └─────────────────────┘
+                                  │
+                                  ▼
+                     Existing APIs: /api/dbt, /api/file, /api/git, …
+                     (each checks permission + team/project scope)</pre>
+
+  <h3>2.3 Recommended stack</h3>
+  <table>
+    <thead><tr><th>Layer</th><th>Recommendation</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Auth &amp; sessions</td><td>Auth.js (NextAuth v5)</td><td>Email/password, magic link, OIDC (Google/Okta/Azure AD).</td></tr>
+      <tr><td>App database</td><td>PostgreSQL</td><td>SQLite possible for dev only.</td></tr>
+      <tr><td>ORM / migrations</td><td>Prisma or Drizzle</td><td>Type-safe access, versioned schema.</td></tr>
+      <tr><td>Authorization</td><td>Central <code>assertPermission(user, action, resource)</code></td><td>Call from every sensitive API route.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.4 Minimal data model</h3>
+  <table>
+    <thead><tr><th>Entity</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>users</code></td><td>id, email, name, auth fields / SSO subject, timestamps.</td></tr>
+      <tr><td><code>teams</code></td><td>id, name, slug, settings.</td></tr>
+      <tr><td><code>team_members</code></td><td>team_id, user_id, role (<code>owner</code> / <code>admin</code> / <code>member</code> / <code>viewer</code>).</td></tr>
+      <tr><td>Sessions</td><td>Managed by Auth.js adapter (DB or JWT strategy).</td></tr>
+      <tr><td><code>audit_events</code> (optional)</td><td>actor_id, action, resource, JSON metadata, timestamp.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.5 Example permission matrix (refine per product)</h3>
+  <table>
+    <thead><tr><th>Action</th><th>viewer</th><th>member</th><th>admin</th><th>owner</th></tr></thead>
+    <tbody>
+      <tr><td>View tree, lineage, catalog, run history</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Edit / save project files</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Run dbt (toolbar / terminal)</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Git commit / push / branch ops</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Manage secrets / profiles / env</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Invite/remove users, delete team</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.6 Dependencies (RBAC)</h3>
+  <ul>
+    <li><strong>PostgreSQL</strong> (or equivalent) — required for durable users/teams/roles.</li>
+    <li><strong>Auth.js</strong> + adapter — sessions, CSRF, OAuth callbacks.</li>
+    <li><strong>HTTPS + secure cookies</strong> — production deployments.</li>
+    <li>Optional: <strong>email provider</strong> (Resend, SendGrid) for invites / magic links.</li>
+  </ul>
+
+  <h3>2.7 Execution order (RBAC)</h3>
+  <ol>
+    <li>Add Postgres to local/prod topology; <code>DATABASE_URL</code>.</li>
+    <li>Introduce Auth.js: sign-in page, session provider, protect routes.</li>
+    <li>Migrate schema: users, teams, team_members.</li>
+    <li>Middleware: require session for <code>/api/*</code> except auth callbacks and public health.</li>
+    <li>Wrap APIs: <code>/api/file</code>, <code>/api/dbt</code>, <code>/api/git</code>, etc. — inject <code>assertPermission</code>.</li>
+    <li>UI: login, team switcher, members/settings, disable buttons by role.</li>
+    <li>Optional: audit log + admin audit viewer.</li>
+  </ol>
+
+  <h3>2.8 Risks (RBAC)</h3>
+  <ul>
+    <li><strong>Concurrent file edits</strong>: RBAC does not replace Git; document workflow (branches, pull before push).</li>
+    <li><strong>Shell / arbitrary commands</strong>: restrict to admins or disable in production.</li>
+    <li><strong>Secrets</strong>: multi-tenant secrets often need a vault or per-tenant env injection — plan explicitly.</li>
+  </ul>
+
+  <hr style="border: none; border-top: 1px solid var(--line); margin: 2rem 0;" />
+
+  <h2>3. Workstream B — Scheduled job orchestration (cron-based dbt)</h2>
+
+  <h3>3.1 Goals</h3>
+  <ul>
+    <li>Define <strong>cron schedules</strong> (expression + IANA timezone).</li>
+    <li>Attach a <strong>dbt command</strong> (e.g. <code>dbt run --select tag:nightly</code>, <code>dbt test</code>, <code>dbt build</code>).</li>
+    <li>Execute <strong>without a browser</strong>; surface logs in UI (extend run history).</li>
+    <li>Optional later: Slack/email on failure.</li>
+  </ul>
+
+  <h3>3.2 Execution options</h3>
+  <table>
+    <thead><tr><th>Approach</th><th>Pros</th><th>Cons</th></tr></thead>
+    <tbody>
+      <tr><td>In-process cron in Next</td><td>Fastest MVP</td><td>Lost on restart; poor with multiple replicas; Vercel/serverless unsuitable for long dbt.</td></tr>
+      <tr><td><strong>Worker + Redis + BullMQ</strong> (recommended)</td><td>Retries, persistence, HA, repeatable cron</td><td>Extra services (Redis, worker container).</td></tr>
+      <tr><td>External (GitHub Actions, K8s CronJob, Airflow)</td><td>Ops-owned reliability</td><td>Less in-app; integrate via webhooks/API.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.3 Recommended architecture</h3>
+  <pre>┌─────────────┐   define/list    ┌──────────────┐   enqueue      ┌─────────────┐
+│  Next.js    │─────────────────▶│  App DB      │───────────────▶│  Redis      │
+│  Schedules   │                  │  schedules,  │   BullMQ       │  queues     │
+│  API + UI    │◀── poll status ──│  job_runs    │                └──────┬──────┘
+└─────────────┘                  └──────────────┘                         │
+                                                                          ▼
+                                                                 ┌─────────────────┐
+                                                                 │  Worker process │
+                                                                 │  spawn dbt CLI  │
+                                                                 │  stream logs    │
+                                                                 └─────────────────┘</pre>
+
+  <h3>3.4 Minimal data model (scheduling)</h3>
+  <table>
+    <thead><tr><th>Entity</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>scheduled_jobs</code></td><td>team_id, cron, timezone, enabled, command JSON (command, args, modelName, target), created_by.</td></tr>
+      <tr><td><code>job_runs</code></td><td>job_id, started_at, ended_at, exit_code, summary or log storage key.</td></tr>
+    </tbody>
+  </table>
+  <p>Align <code>job_runs</code> with existing run history (file or DB) for a single timeline in the UI.</p>
+
+  <h3>3.5 Conceptual API surface</h3>
+  <ul>
+    <li><code>POST /api/schedules</code> — create (RBAC: admin+).</li>
+    <li><code>GET /api/schedules</code> — list for current team.</li>
+    <li><code>PATCH /api/schedules/:id</code> — enable/disable, edit cron/command.</li>
+    <li><code>POST /api/schedules/:id/run-now</code> — manual trigger.</li>
+    <li>Worker: consumes queue; no public internet unless you add an internal trigger with shared secret.</li>
+  </ul>
+
+  <h3>3.6 Dependencies (scheduling)</h3>
+  <ul>
+    <li><strong>Redis</strong> — job queue + repeatable jobs (BullMQ).</li>
+    <li><strong>Worker service</strong> — same image as Next with different <code>CMD</code>, or separate Node app sharing dbt run module.</li>
+    <li><strong>Shared dbt execution module</strong> — one code path used by <code>/api/dbt</code> and worker (arguments, cwd, env, streaming logs).</li>
+    <li><strong>Cron + timezone</strong> — e.g. <code>cron-parser</code> or BullMQ repeat with timezone option.</li>
+  </ul>
+
+  <h3>3.7 Execution order (scheduling)</h3>
+  <ol>
+    <li>Add Redis + worker skeleton (Docker Compose locally).</li>
+    <li>Extract “run dbt subprocess + stream” into a shared library used by API and worker.</li>
+    <li>Persist schedules + job_runs in App DB.</li>
+    <li>Next API: CRUD + enqueue “run now”.</li>
+    <li>Worker: register repeatable jobs from DB on startup + reconcile; execute dbt; write job_runs.</li>
+    <li>UI: Schedules panel, link runs to history.</li>
+    <li>Hardening: mutex per project for overlapping runs, timeouts, alerts.</li>
+  </ol>
+
+  <h3>3.8 Risks (scheduling)</h3>
+  <ul>
+    <li><strong>Concurrent dbt</strong> and <code>target/</code> directory — serialize or isolate worktrees.</li>
+    <li><strong>Worker credentials</strong> — same as interactive dbt; document rotation.</li>
+    <li><strong>Multi-tenant fairness</strong> — rate limits or per-team queues.</li>
+  </ul>
+
+  <h2>4. Combined phased roadmap (both workstreams)</h2>
+  <ol>
+    <li>Postgres + migrations + Compose (local).</li>
+    <li>Auth.js + login + session + API middleware.</li>
+    <li>Teams + roles + permission checks on read APIs, then write/git/dbt.</li>
+    <li>Redis + worker + shared dbt runner.</li>
+    <li>Schedules CRUD + BullMQ repeat + job_runs UI.</li>
+    <li>Audit + notifications (optional).</li>
+  </ol>
+
+  <h2>5. Phase 4 exit criteria (suggested)</h2>
+  <ul class="checklist">
+    <li>User without role cannot run dbt or save files.</li>
+    <li>Team admin can invite a user; owner can remove team.</li>
+    <li>A schedule runs without a browser; result appears in run history.</li>
+    <li>Disabling a schedule stops future runs within one scheduling window.</li>
+    <li>Runbook documents single-replica vs multi-replica (where cron/worker runs).</li>
+  </ul>
+
+  <div class="footer">
+    <strong>File location:</strong> <code>docs/phase-4-rbac-and-scheduling-plan.html</code><br />
+    <strong>One PDF:</strong> Open this HTML → Print → Save as PDF (single file contains Sections 1–5).
+  </div>
+
+</body>
+</html>

@@ -1,9 +1,10 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { spawn, execSync } from 'child_process';
 import { accessSync, constants } from 'fs';
 import path from 'path';
 import { DBT_ROOT } from '@/lib/fileSystem';
 import { invalidateCache } from '@/lib/manifest';
+import { requireEditor } from '@/lib/apiAuth';
 
 // Resolve dbt binary: env var → venv → vdbt → system dbt
 function resolveDbtBin(): string {
@@ -85,6 +86,9 @@ function classifyLine(text: string, isStderr: boolean): LineType {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireEditor();
+  if (gate instanceof NextResponse) return gate;
+
   const { command, args = [], modelName, target } = (await req.json()) as {
     command: string;
     args?: string[];

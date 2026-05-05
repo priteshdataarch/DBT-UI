@@ -12,6 +12,8 @@ import RunHistoryPanel from '@/components/RunHistoryPanel';
 import LineageView from '@/components/LineageView';
 import ResizeHandle from '@/components/ResizeHandle';
 import GitPanel from '@/components/GitPanel';
+import TeamPanel from '@/components/TeamPanel';
+import SchedulesPanel from '@/components/SchedulesPanel';
 import SqlEditorPanel from '@/components/SqlEditorPanel';
 import GlobalSearch from '@/components/GlobalSearch';
 import MacrosPanel from '@/components/MacrosPanel';
@@ -28,6 +30,8 @@ import {
   TerminalSquare,
   Search,
   History,
+  Users,
+  CalendarClock,
 } from 'lucide-react';
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
@@ -153,7 +157,7 @@ export default function Home() {
   const [showModelModal, setShowModelModal] = useState(false);
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
-  const [showGitPanel, setShowGitPanel]       = useState(false);
+  const [rightPanel, setRightPanel] = useState<'git' | 'team' | 'schedules' | null>(null);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [gitAhead, setGitAhead] = useState(0);
@@ -320,6 +324,34 @@ export default function Home() {
     [activeTab, openTabs]
   );
 
+  const handleFileDeleted = useCallback(
+    (path: string) => {
+      setTreeRefreshKey((k) => k + 1);
+      setOpenTabs((prev) => {
+        const idx = prev.findIndex((t) => t.path === path);
+        if (idx === -1) return prev;
+        const next = prev.filter((t) => t.path !== path);
+        if (activeTab === path) {
+          setActiveTab(next.length > 0 ? next[Math.min(idx, next.length - 1)].path : null);
+        }
+        return next;
+      });
+    },
+    [activeTab]
+  );
+
+  const handleFileRenamed = useCallback(
+    (oldPath: string, newPath: string) => {
+      setTreeRefreshKey((k) => k + 1);
+      const name = newPath.split('/').pop() ?? newPath;
+      setOpenTabs((prev) =>
+        prev.map((t) => (t.path === oldPath ? { ...t, path: newPath, name } : t))
+      );
+      if (activeTab === oldPath) setActiveTab(newPath);
+    },
+    [activeTab]
+  );
+
   const updateTabContent = useCallback((path: string, content: string) => {
     setOpenTabs((prev) =>
       prev.map((t) => (t.path === path ? { ...t, content, isDirty: true } : t))
@@ -470,10 +502,10 @@ export default function Home() {
           <span className="text-sm font-semibold text-white">DBT DataArch Studio</span>
         </div>
         <button
-          onClick={() => setShowGitPanel((v) => !v)}
+          onClick={() => setRightPanel((p) => (p === 'git' ? null : 'git'))}
           title="Source Control"
           className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors shrink-0 ${
-            showGitPanel
+            rightPanel === 'git'
               ? 'bg-[#007acc]/20 text-[#4fc3f7]'
               : 'text-[#8b8b8b] hover:text-[#d4d4d4] hover:bg-[#3e3e42]'
           }`}
@@ -485,6 +517,30 @@ export default function Home() {
               ↑{gitAhead}
             </span>
           )}
+        </button>
+        <button
+          onClick={() => setRightPanel((p) => (p === 'team' ? null : 'team'))}
+          title="Team & access"
+          className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors shrink-0 ${
+            rightPanel === 'team'
+              ? 'bg-[#007acc]/20 text-[#4fc3f7]'
+              : 'text-[#8b8b8b] hover:text-[#d4d4d4] hover:bg-[#3e3e42]'
+          }`}
+        >
+          <Users size={11} />
+          <span className="text-[10px]">Team</span>
+        </button>
+        <button
+          onClick={() => setRightPanel((p) => (p === 'schedules' ? null : 'schedules'))}
+          title="Scheduled dbt runs"
+          className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors shrink-0 ${
+            rightPanel === 'schedules'
+              ? 'bg-[#007acc]/20 text-[#4fc3f7]'
+              : 'text-[#8b8b8b] hover:text-[#d4d4d4] hover:bg-[#3e3e42]'
+          }`}
+        >
+          <CalendarClock size={11} />
+          <span className="text-[10px]">Jobs</span>
         </button>
 
         <div className="w-px h-4 bg-[#3e3e42] mx-1 shrink-0" />
@@ -508,7 +564,11 @@ export default function Home() {
           </button>
           {showTargetMenu && (
             <>
-              <div className="fixed inset-0 z-30" onClick={() => setShowTargetMenu(false)} />
+              <div
+                className="fixed left-0 right-0 top-10 bottom-0 z-30"
+                onClick={() => setShowTargetMenu(false)}
+                aria-hidden
+              />
               <div className="absolute top-7 left-0 z-40 bg-[#252526] border border-[#3e3e42] rounded shadow-xl py-1 min-w-[100px] text-xs">
                 {availableTargets.map((t) => (
                   <button
@@ -674,6 +734,9 @@ export default function Home() {
               onFileOpen={openFile}
               refreshKey={treeRefreshKey}
               activeFilePath={activeTab}
+              isFileDirty={(p) => openTabs.some((t) => t.path === p && t.isDirty)}
+              onFileDeleted={handleFileDeleted}
+              onFileRenamed={handleFileRenamed}
             />
           </div>
 
@@ -712,15 +775,21 @@ export default function Home() {
             />
           </div>
 
-          {/* Git panel — slides in from the right */}
-          {showGitPanel && (
+          {/* Git / Team / Schedules — same slide-in column as Source Control */}
+          {rightPanel && (
             <>
               <div className="w-px bg-[#3e3e42] shrink-0" />
               <div className="w-[280px] shrink-0 h-full min-h-0 overflow-hidden">
-                <GitPanel
-                  onClose={() => setShowGitPanel(false)}
-                  onRefreshTree={() => setTreeRefreshKey((k) => k + 1)}
-                />
+                {rightPanel === 'git' && (
+                  <GitPanel
+                    onClose={() => setRightPanel(null)}
+                    onRefreshTree={() => setTreeRefreshKey((k) => k + 1)}
+                  />
+                )}
+                {rightPanel === 'team' && <TeamPanel onClose={() => setRightPanel(null)} />}
+                {rightPanel === 'schedules' && (
+                  <SchedulesPanel onClose={() => setRightPanel(null)} onRunNow={runDbt} />
+                )}
               </div>
             </>
           )}
@@ -848,7 +917,13 @@ export default function Home() {
         />
       )}
       {showSqlEditor && (
-        <SqlEditorPanel onClose={() => setShowSqlEditor(false)} />
+        <SqlEditorPanel
+          onClose={() => setShowSqlEditor(false)}
+          onModelCreated={(path) => {
+            setShowSqlEditor(false);
+            void openFileByPath(path);
+          }}
+        />
       )}
 
       {showGlobalSearch && (

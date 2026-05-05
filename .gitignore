@@ -137,6 +137,9 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+
+# Allow Prisma’s checked-in default (SQLite only — no secrets)
+!dbt-ui/prisma/.env
 .venv
 env/
 venv/
@@ -215,3 +218,7 @@ dbt-ui/.env.local
 node_modules/
 .next/
 dbt-feature-report.html
+
+# Prisma (dbt-ui app DB)
+dbt-ui/prisma/*.db
+dbt-ui/prisma/*.db-journal

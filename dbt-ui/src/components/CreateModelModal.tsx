@@ -6,6 +6,10 @@ import { X, Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight, Plus } from
 interface Props {
   onClose: () => void;
   onCreated: (path: string) => void;
+  /** When set, model body is built from this SQL (Query editor) plus the dbt config below. */
+  initialQuerySql?: string | null;
+  /** Stacking order when opened on top of another full-screen panel (e.g. SQL editor). */
+  overlayZClass?: string;
 }
 
 // ── Config options ────────────────────────────────────────────────────────
@@ -110,6 +114,17 @@ function generateModelSQL(
   return `${configBlock}\n\nselect\n    -- TODO: add your columns\n    *\nfrom {{ source('source_name', 'table_name') }}\n`;
 }
 
+/** Place warehouse SQL after the dbt config block — the query is used as-is (no subquery wrapper). */
+function buildModelSqlFromQuery(
+  rawSql: string,
+  cfg: ModelConfig,
+  optGroups: OptionalGroups
+): string {
+  const body = rawSql.trim().replace(/;\s*$/, '');
+  const configBlock = generateConfigBlock(cfg, false, optGroups);
+  return `${configBlock}\n\n${body}\n`;
+}
+
 function generateSchemaEntry(modelName: string): string {
   return (
     `\n  - name: ${modelName}\n` +
@@ -163,7 +178,7 @@ function Sel({
 
 type FolderMode = 'existing' | 'new';
 
-export default function CreateModelModal({ onClose, onCreated }: Props) {
+export default function CreateModelModal({ onClose, onCreated, initialQuerySql = null, overlayZClass = 'z-50' }: Props) {
 
   // ── Core state ────────────────────────────────────────────────────────
   const [name, setName] = useState('');
@@ -175,6 +190,12 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
   const [addToSchema, setAddToSchema] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
   const [cfg, setCfg] = useState<ModelConfig>({ ...DEFAULT_CONFIG });
+  /** When non-null, final SQL is derived from this query + cfg (Query editor flow). */
+  const [queryBasisSql, setQueryBasisSql] = useState<string | null>(() =>
+    initialQuerySql?.trim() ? initialQuerySql.trim() : null
+  );
+  const [generatedSQL, setGeneratedSQL] = useState('');
+  const [generating, setGenerating] = useState(false);
   // Which optional config groups are enabled (all off = use project defaults)
   const [optGroups, setOptGroups] = useState<OptionalGroups>({
     storage: false,
@@ -210,6 +231,13 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
 
   useEffect(() => { fetchFolders(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
+  useEffect(() => {
+    if (queryBasisSql) {
+      setGeneratedSQL(buildModelSqlFromQuery(queryBasisSql, cfg, optGroups));
+      setShowConfig(true);
+    }
+  }, [queryBasisSql, cfg, optGroups]);
+
   const handleFolderChange = (f: string) => {
     setFolder(f);
     setCfg((prev) => ({ ...prev, ...suggestConfig(f) }));
@@ -225,9 +253,6 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
   const needsStorageConfig = cfg.materialized !== 'view' && cfg.materialized !== 'ephemeral';
 
   // ── AI generation ─────────────────────────────────────────────────────
-  const [generatedSQL, setGeneratedSQL] = useState('');
-  const [generating, setGenerating] = useState(false);
-
   const validate = () => {
     if (!name.trim()) return 'Model name is required';
     if (!/^[a-z_][a-z0-9_]*$/.test(name.trim()))
@@ -241,6 +266,7 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
     if (err) { setError(err); return; }
     setGenerating(true);
     setError('');
+    setQueryBasisSql(null);
     setGeneratedSQL('');
     const refsArray = refs.split(',').map((r) => r.trim()).filter(Boolean);
     const [srcName, srcTable] = sourceRef ? sourceRef.split('.') : [];
@@ -262,9 +288,13 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
       });
       const data = await res.json();
       const sqlMatch = data.message.match(/```sql\n([\s\S]+?)```/);
-      if (sqlMatch) setGeneratedSQL(sqlMatch[1].trim());
-      else if (data.message.includes('{{ config(')) setGeneratedSQL(data.message.trim());
-      else setError(data.message.startsWith('⚠️') ? data.message : 'AI did not return valid SQL. Try adding refs or a source.');
+      if (sqlMatch) {
+        setQueryBasisSql(null);
+        setGeneratedSQL(sqlMatch[1].trim());
+      } else if (data.message.includes('{{ config(')) {
+        setQueryBasisSql(null);
+        setGeneratedSQL(data.message.trim());
+      } else setError(data.message.startsWith('⚠️') ? data.message : 'AI did not return valid SQL. Try adding refs or a source.');
     } catch { setError('AI generation failed. Check OPENAI_API_KEY in .env.local.'); }
     finally { setGenerating(false); }
   };
@@ -277,7 +307,9 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
     const modelName = name.trim();
     const sqlPath = `${activeFolder}/${modelName}.sql`;
     const refsArray = refs.split(',').map((r) => r.trim()).filter(Boolean);
-    const sqlContent = generatedSQL || generateModelSQL(modelName, cfg, optGroups, refsArray, sourceRef);
+    const sqlContent = queryBasisSql
+      ? buildModelSqlFromQuery(queryBasisSql, cfg, optGroups)
+      : (generatedSQL || generateModelSQL(modelName, cfg, optGroups, refsArray, sourceRef));
     try {
       const res = await fetch('/api/file', {
         method: 'POST',
@@ -305,7 +337,7 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center ${overlayZClass}`}>
       <div className="bg-[#252526] border border-[#3e3e42] rounded-lg w-[600px] max-h-[90vh] overflow-y-auto shadow-2xl">
 
         {/* Header */}
@@ -324,7 +356,10 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
             <input
               autoFocus
               value={name}
-              onChange={(e) => { setName(e.target.value); setGeneratedSQL(''); }}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (!queryBasisSql) setGeneratedSQL('');
+              }}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               placeholder="e.g. f_sessions_daily"
               className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none transition-colors"
@@ -420,7 +455,7 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
                   </div>
                   <Sel label="" value={cfg.materialized}
                     options={MATERIALIZATIONS}
-                    onChange={(v) => { setField('materialized', v); setGeneratedSQL(''); }} />
+                    onChange={(v) => { setField('materialized', v); if (!queryBasisSql) setGeneratedSQL(''); }} />
                 </div>
 
                 {/* Storage — OPTIONAL */}
@@ -536,7 +571,7 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
             <label className="block text-xs text-[#8b8b8b] mb-1.5">
               Upstream refs <span className="text-[#5a5a5a]">(comma-separated model names)</span>
             </label>
-            <input value={refs} onChange={(e) => { setRefs(e.target.value); setGeneratedSQL(''); }}
+            <input value={refs} onChange={(e) => { setRefs(e.target.value); if (!queryBasisSql) setGeneratedSQL(''); }}
               placeholder="e.g. stg_sessions, d_users"
               className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none transition-colors" />
           </div>
@@ -546,7 +581,7 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
             <label className="block text-xs text-[#8b8b8b] mb-1.5">
               Source reference <span className="text-[#5a5a5a]">(source_name.table_name)</span>
             </label>
-            <input value={sourceRef} onChange={(e) => { setSourceRef(e.target.value); setGeneratedSQL(''); }}
+            <input value={sourceRef} onChange={(e) => { setSourceRef(e.target.value); if (!queryBasisSql) setGeneratedSQL(''); }}
               placeholder="e.g. application_db.raw_session"
               className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-3 py-2 text-sm text-[#d4d4d4] placeholder-[#5a5a5a] outline-none transition-colors" />
           </div>
@@ -564,9 +599,19 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
               <div className="flex items-center justify-between px-3 py-1.5 bg-[#2d2d2d]">
                 <div className="flex items-center gap-1.5">
                   <Sparkles size={12} className="text-[#007acc]" />
-                  <span className="text-[10px] text-[#8b8b8b]">AI-generated SQL preview</span>
+                  <span className="text-[10px] text-[#8b8b8b]">
+                    {queryBasisSql ? 'Model SQL (from query editor)' : 'AI-generated SQL preview'}
+                  </span>
                 </div>
-                <button onClick={() => setGeneratedSQL('')} className="text-[10px] text-[#5a5a5a] hover:text-[#8b8b8b]">discard</button>
+                <button
+                  onClick={() => {
+                    setGeneratedSQL('');
+                    setQueryBasisSql(null);
+                  }}
+                  className="text-[10px] text-[#5a5a5a] hover:text-[#8b8b8b]"
+                >
+                  discard
+                </button>
               </div>
               <textarea readOnly value={generatedSQL} rows={10}
                 className="w-full bg-[#1a1a1a] text-xs text-[#d4d4d4] font-mono p-3 outline-none resize-none leading-relaxed" />
@@ -581,7 +626,11 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
           {name.trim() && activeFolder && (
             <p className="text-[10px] text-[#5a5a5a] font-mono bg-[#1e1e1e] rounded px-2 py-1">
               → {activeFolder}/{name.trim()}.sql
-              {generatedSQL && <span className="ml-2 text-[#007acc]">✓ AI SQL ready</span>}
+              {generatedSQL && (
+                <span className="ml-2 text-[#007acc]">
+                  {queryBasisSql ? '✓ from query' : '✓ AI SQL ready'}
+                </span>
+              )}
             </p>
           )}
         </div>
@@ -601,7 +650,13 @@ export default function CreateModelModal({ onClose, onCreated }: Props) {
             </button>
             <button onClick={handleCreate} disabled={loading}
               className="px-4 py-1.5 text-xs bg-[#0e639c] hover:bg-[#1177bb] disabled:opacity-50 disabled:cursor-not-allowed rounded text-white font-medium transition-colors">
-              {loading ? 'Creating…' : generatedSQL ? 'Create with AI SQL' : 'Create Model'}
+              {loading
+                ? 'Creating…'
+                : queryBasisSql
+                  ? 'Create model'
+                  : generatedSQL
+                    ? 'Create with AI SQL'
+                    : 'Create Model'}
             </button>
           </div>
         </div>

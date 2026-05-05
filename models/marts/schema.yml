@@ -1,1 +1,10 @@
 
+  - name: test_model
+    description: "TODO: describe test_model"
+    columns:
+      - name: id
+        description: "Primary key"
+        tests:
+          - unique
+          - not_null
+

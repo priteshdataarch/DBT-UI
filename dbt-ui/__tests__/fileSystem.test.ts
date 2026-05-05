@@ -91,3 +91,54 @@ describe('createFile path validation', () => {
     await fs.rmdir(tmpDir);
   });
 });
+
+describe('deleteFile and renameFile', () => {
+  let tmpDir: string;
+
+  afterEach(async () => {
+    if (tmpDir) {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+      tmpDir = '';
+    }
+    delete process.env.DBT_PROJECT_ROOT;
+    jest.resetModules();
+  });
+
+  async function loadFs() {
+    jest.resetModules();
+    return import('@/lib/fileSystem');
+  }
+
+  it('deleteFile removes an allowed file', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dbt-fs-'));
+    process.env.DBT_PROJECT_ROOT = tmpDir;
+    const { createFile, deleteFile } = await loadFs();
+    await createFile('models/a.sql', 'select 1');
+    await deleteFile('models/a.sql');
+    await expect(fs.access(path.join(tmpDir, 'models', 'a.sql'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('renameFile returns new path and keeps extension', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dbt-fs-'));
+    process.env.DBT_PROJECT_ROOT = tmpDir;
+    const { createFile, renameFile } = await loadFs();
+    await createFile('models/old.sql', 'select 1');
+    const newPath = await renameFile('models/old.sql', 'new.sql');
+    expect(newPath).toBe('models/new.sql');
+    await expect(fs.access(path.join(tmpDir, 'models', 'old.sql'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    const body = await fs.readFile(path.join(tmpDir, 'models', 'new.sql'), 'utf-8');
+    expect(body).toBe('select 1');
+  });
+
+  it('renameFile rejects extension change', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dbt-fs-'));
+    process.env.DBT_PROJECT_ROOT = tmpDir;
+    const { createFile, renameFile } = await loadFs();
+    await createFile('x.sql', 'x');
+    await expect(renameFile('x.sql', 'x.yml')).rejects.toThrow(/extension/i);
+  });
+});

@@ -1,5 +1,217 @@
 [
   {
+    "id": "run-1777551033053-feq9t",
+    "command": "dbt run --select +m_skill_score_mindset",
+    "target": "dev",
+    "startedAt": "2026-04-30T12:09:51.822Z",
+    "durationMs": 41231,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "12:10:31  Done. PASS=3 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=3",
+    "lines": [
+      {
+        "text": "12:09:52  Running with dbt=1.11.8",
+        "lineType": "info"
+      },
+      {
+        "text": "12:09:53  Registered adapter: athena=1.10.0",
+        "lineType": "info"
+      },
+      {
+        "text": "12:09:53  Found 33 models, 70 data tests, 1 seed, 28 sources, 605 macros",
+        "lineType": "info"
+      },
+      {
+        "text": "12:09:53  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:09:53  Concurrency: 4 threads (target='dev')",
+        "lineType": "info"
+      },
+      {
+        "text": "12:09:53  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:09:57  1 of 3 START sql table model dbt.d_building_blocks ............................. [RUN]",
+        "lineType": "info"
+      },
+      {
+        "text": "12:09:57  2 of 3 START sql table model dbt.f_events_mindset .............................. [RUN]",
+        "lineType": "info"
+      },
+      {
+        "text": "12:10:24  2 of 3 OK created sql table model dbt.f_events_mindset ......................... [OK 47989 in 27.49s]",
+        "lineType": "success"
+      },
+      {
+        "text": "12:10:25  1 of 3 OK created sql table model dbt.d_building_blocks ........................ [OK 2319 in 28.07s]",
+        "lineType": "success"
+      },
+      {
+        "text": "12:10:25  3 of 3 START sql view model dbt.m_skill_score_mindset .......................... [RUN]",
+        "lineType": "info"
+      },
+      {
+        "text": "12:10:31  3 of 3 OK created sql view model dbt.m_skill_score_mindset ..................... [OK -1 in 6.00s]",
+        "lineType": "success"
+      },
+      {
+        "text": "12:10:31  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:10:31  Finished running 2 table models, 1 view model in 0 hours 0 minutes and 38.00 seconds (38.00s).",
+        "lineType": "info"
+      },
+      {
+        "text": "12:10:31  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:10:31  Completed successfully",
+        "lineType": "success"
+      },
+      {
+        "text": "12:10:31  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:10:31  Done. PASS=3 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=3",
+        "lineType": "success"
+      }
+    ]
+  },
+  {
+    "id": "run-1777550934620-bzmdv",
+    "command": "dbt docs generate",
+    "target": "dev",
+    "startedAt": "2026-04-30T12:08:42.914Z",
+    "durationMs": 11706,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "12:08:53  Catalog written to /Users/pritesh/Desktop/DBT-UI/DBT-UI/target/catalog.json",
+    "lines": [
+      {
+        "text": "12:08:44  Running with dbt=1.11.8",
+        "lineType": "info"
+      },
+      {
+        "text": "12:08:44  Registered adapter: athena=1.10.0",
+        "lineType": "info"
+      },
+      {
+        "text": "12:08:44  Found 33 models, 70 data tests, 1 seed, 28 sources, 605 macros",
+        "lineType": "info"
+      },
+      {
+        "text": "12:08:44  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:08:44  Concurrency: 4 threads (target='dev')",
+        "lineType": "info"
+      },
+      {
+        "text": "12:08:44  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:08:49  Building catalog",
+        "lineType": "info"
+      },
+      {
+        "text": "/Users/pritesh/Desktop/DBT-UI/DBT-UI/venv/lib/python3.13/site-packages/agate/type_tester.py:92: RuntimeWarning: \"table_owner\" does not match the name of any column in this table.",
+        "lineType": "warning"
+      },
+      {
+        "text": "  warnings.warn('\"%s\" does not match the name of any column in this table.' % name, RuntimeWarning)",
+        "lineType": "warning"
+      },
+      {
+        "text": "/Users/pritesh/Desktop/DBT-UI/DBT-UI/venv/lib/python3.13/site-packages/agate/type_tester.py:92: RuntimeWarning: \"table_owner\" does not match the name of any column in this table.",
+        "lineType": "warning"
+      },
+      {
+        "text": "  warnings.warn('\"%s\" does not match the name of any column in this table.' % name, RuntimeWarning)",
+        "lineType": "warning"
+      },
+      {
+        "text": "12:08:53  Catalog written to /Users/pritesh/Desktop/DBT-UI/DBT-UI/target/catalog.json",
+        "lineType": "info"
+      }
+    ]
+  },
+  {
+    "id": "run-1777550820342-ms5za",
+    "command": "dbt run --select d_client",
+    "target": "dev",
+    "startedAt": "2026-04-30T12:06:23.071Z",
+    "durationMs": 37271,
+    "exitCode": 0,
+    "status": "success",
+    "summary": "12:06:58  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1",
+    "lines": [
+      {
+        "text": "12:06:25  Running with dbt=1.11.8",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:25  Registered adapter: athena=1.10.0",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:25  Found 33 models, 70 data tests, 1 seed, 28 sources, 605 macros",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:25  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:25  Concurrency: 4 threads (target='dev')",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:25  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:29  1 of 1 START sql table model dbt.d_client ...................................... [RUN]",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:58  1 of 1 OK created sql table model dbt.d_client ................................. [OK 865 in 28.80s]",
+        "lineType": "success"
+      },
+      {
+        "text": "12:06:58  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:58  Finished running 1 table model in 0 hours 0 minutes and 32.94 seconds (32.94s).",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:58  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:58  Completed successfully",
+        "lineType": "success"
+      },
+      {
+        "text": "12:06:58  ",
+        "lineType": "info"
+      },
+      {
+        "text": "12:06:58  Done. PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1",
+        "lineType": "success"
+      }
+    ]
+  },
+  {
     "id": "run-1777544912588-o1f60",
     "command": "pwd",
     "target": "dev",

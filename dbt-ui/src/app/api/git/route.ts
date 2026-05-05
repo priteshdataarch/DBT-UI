@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import { requireEditor, requireReader } from '@/lib/apiAuth';
 
 const DBT_ROOT = process.env.DBT_PROJECT_ROOT
   ? path.resolve(process.env.DBT_PROJECT_ROOT)
@@ -54,6 +55,9 @@ export interface GitStatus {
 
 // ── GET — return full git status ──────────────────────────────────────────────
 export async function GET(): Promise<NextResponse> {
+  const gate = await requireReader();
+  if (gate instanceof NextResponse) return gate;
+
   try {
     // Verify it's a git repo
     await run(['rev-parse', '--is-inside-work-tree']);
@@ -131,6 +135,9 @@ export async function GET(): Promise<NextResponse> {
 
 // ── POST — perform git action ─────────────────────────────────────────────────
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const gate = await requireEditor();
+  if (gate instanceof NextResponse) return gate;
+
   const body = await req.json() as {
     action: string;
     message?: string;
