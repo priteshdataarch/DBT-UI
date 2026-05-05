@@ -1,10 +1,17 @@
+# Dependencies & build output (reinstalled / rebuilt inside the image)
+**/node_modules
+**/.next
+**/dist
+
+# Git & IDE
 .git
 .gitignore
-.github
-.vscode
 .cursor
-target/
-dbt_packages/
-logs/
-*.md
-.user.yml
+
+# Local secrets (pass via docker-compose env or mounts instead)
+**/.env.local
+**/.env*.local
+
+# Logs & sqlite dev DB (fresh DB created on container start via prisma db push)
+*.db
+*.db-journal

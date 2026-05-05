@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 export async function POST(request: Request) {
   const { sql } = (await request.json()) as { sql: string };
 
@@ -10,9 +8,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'SQL is required' }, { status: 400 });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
     return NextResponse.json({ error: 'OPENAI_API_KEY not configured' }, { status: 500 });
   }
+
+  // Instantiate inside the handler so `next build` does not require OPENAI_API_KEY
+  // (the SDK throws on construction when the key is missing).
+  const openai = new OpenAI({ apiKey });
 
   const prompt = `You are a senior data analyst. Explain the following SQL query in plain English.
 
