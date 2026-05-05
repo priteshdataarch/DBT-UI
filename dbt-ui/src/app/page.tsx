@@ -97,6 +97,22 @@ async function fetchFileLockState(path: string, mtimeMs: number | null): Promise
   };
 }
 
+/** Keep first tab per path — duplicate paths break React keys and editor identity. */
+function dedupeTabsByPath(tabs: OpenFileTab[]): OpenFileTab[] {
+  const seen = new Set<string>();
+  const out: OpenFileTab[] = [];
+  let removed = false;
+  for (const t of tabs) {
+    if (seen.has(t.path)) {
+      removed = true;
+      continue;
+    }
+    seen.add(t.path);
+    out.push(t);
+  }
+  return removed ? out : tabs;
+}
+
 /** Project-wide only — used in the separate "All models" dropdown */
 const PROJECT_RUN_TEST_ITEMS: { label: string; description: string; cmd: DbtCommand }[] = [
   {
@@ -244,6 +260,15 @@ export default function Home() {
   const activeFileTab = openTabs.find((t) => t.path === activeTab);
 
   openTabsRef.current = openTabs;
+
+  const tabPathsSig = useMemo(
+    () => openTabs.map((t) => t.path).join('\u0001'),
+    [openTabs]
+  );
+
+  useEffect(() => {
+    setOpenTabs((prev) => dedupeTabsByPath(prev));
+  }, [tabPathsSig]);
 
   /** Per-model run / test + graph selectors — left dropdown */
   const modelRunTestDropdownItems = useMemo(() => {

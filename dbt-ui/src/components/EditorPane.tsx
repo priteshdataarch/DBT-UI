@@ -440,11 +440,11 @@ export default function EditorPane({
 
       {/* ── Tab bar ──────────────────────────────────────── */}
       <div className="flex bg-[#252526] border-b border-[#3e3e42] overflow-x-auto shrink-0 select-none">
-        {tabs.map((tab) => {
+        {tabs.map((tab, tabIndex) => {
           const isActive = tab.path === activeTab;
           return (
             <div
-              key={tab.path}
+              key={`${tab.path}\u0001${tabIndex}`}
               onClick={() => onTabClick(tab.path)}
               title={tab.path}
               className={`flex items-center gap-1.5 px-3 py-2 cursor-pointer border-r border-[#3e3e42] shrink-0 group transition-colors ${

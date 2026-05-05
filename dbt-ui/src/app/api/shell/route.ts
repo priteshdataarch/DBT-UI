@@ -31,6 +31,16 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  if (!gate.bypass && gate.role !== 'ADMIN' && /^\s*git\b/i.test(line)) {
+    return NextResponse.json(
+      {
+        error:
+          'Git commands in the terminal require admin role. Use Source Control (read-only for editors) or ask an admin to stage, commit, or push.',
+      },
+      { status: 403 }
+    );
+  }
+
   const encoder = new TextEncoder();
   const isWin = process.platform === 'win32';
   const shellCmd = isWin
