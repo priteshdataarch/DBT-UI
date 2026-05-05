@@ -3,3 +3,7 @@
 561
 
 51515
+
+git config --local --unset credential.helper
+git config --local user.name "Saurabh Kumar"
+git config --local user.email "saurabh1@dataarch.co"
