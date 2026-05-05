@@ -16,6 +16,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ bypass: true });
   }
 
+  if (gate.bypass) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const filePath = typeof body.path === 'string' ? body.path : '';
   const token = typeof body.token === 'string' ? body.token : undefined;
@@ -65,6 +69,10 @@ export async function DELETE(req: NextRequest) {
 
   if (!isLoginEnforced()) {
     return NextResponse.json({ bypass: true });
+  }
+
+  if (gate.bypass) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const body = await req.json().catch(() => ({}));
