@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
-import { requireEditor, requireReader } from '@/lib/apiAuth';
+import { requireAdmin, requireReader } from '@/lib/auth';
 
 const DBT_ROOT = process.env.DBT_PROJECT_ROOT
   ? path.resolve(process.env.DBT_PROJECT_ROOT)
@@ -51,6 +51,8 @@ export interface GitStatus {
   untracked: GitFileEntry[];
   isRepo: boolean;
   branches?: GitBranch[];
+  /** Stage / commit / push / pull / branch — only true for ADMIN (or login bypass). */
+  gitWriteAllowed?: boolean;
 }
 
 // ── GET — return full git status ──────────────────────────────────────────────
@@ -58,11 +60,13 @@ export async function GET(): Promise<NextResponse> {
   const gate = await requireReader();
   if (gate instanceof NextResponse) return gate;
 
+  const gitWriteAllowed = gate.bypass || gate.role === 'ADMIN';
+
   try {
     // Verify it's a git repo
     await run(['rev-parse', '--is-inside-work-tree']);
   } catch {
-    return NextResponse.json({ isRepo: false } as Partial<GitStatus>);
+    return NextResponse.json({ isRepo: false, gitWriteAllowed } as Partial<GitStatus>);
   }
 
   try {
@@ -127,15 +131,25 @@ export async function GET(): Promise<NextResponse> {
       }
     } catch { /* ignore branch errors */ }
 
-    return NextResponse.json({ branch, ahead, behind, staged, unstaged, untracked, isRepo: true, branches } as GitStatus);
+    return NextResponse.json({
+      branch,
+      ahead,
+      behind,
+      staged,
+      unstaged,
+      untracked,
+      isRepo: true,
+      branches,
+      gitWriteAllowed,
+    } as GitStatus);
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
 
-// ── POST — perform git action ─────────────────────────────────────────────────
+// ── POST — perform git action (admin-only when login is enforced) ─────────────
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const gate = await requireEditor();
+  const gate = await requireAdmin();
   if (gate instanceof NextResponse) return gate;
 
   const body = await req.json() as {

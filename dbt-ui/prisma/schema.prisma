@@ -22,6 +22,7 @@ model User {
   updatedAt    DateTime     @updatedAt
   teamMembers  TeamMember[]
   schedules    Schedule[]   @relation("ScheduleCreatedBy")
+  fileLocks    FileLock[]
 }
 
 model Team {
@@ -30,6 +31,7 @@ model Team {
   createdAt DateTime     @default(now())
   members   TeamMember[]
   schedules Schedule[]
+  fileLocks FileLock[]
 }
 
 model TeamMember {
@@ -70,4 +72,18 @@ model ScheduleRunLog {
   finishedAt DateTime?
   exitCode   Int?
   summary    String?
+}
+
+/** One exclusive edit lock per (team, path). Expires automatically if not refreshed. */
+model FileLock {
+  id        String   @id @default(cuid())
+  teamId    String
+  path      String
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, path])
 }

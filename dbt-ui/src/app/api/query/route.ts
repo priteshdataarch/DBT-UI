@@ -6,7 +6,7 @@ import {
   GetQueryResultsCommand,
   QueryExecutionState,
 } from '@aws-sdk/client-athena';
-import { buildAllSchemaChunks } from '@/lib/catalog';
+import { buildAllSchemaChunks } from '@/lib/dbt';
 
 const S3_STAGING_DIR = 's3://mursion-dbt-athena/staging_dir/preview/';
 const ATHENA_DATABASE = 'dbt';

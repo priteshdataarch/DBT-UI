@@ -262,7 +262,7 @@ export default function FileExplorer({
           Explorer
         </span>
         <button
-          onClick={fetchTree}
+          onClick={() => void fetchTree()}
           title="Refresh"
           className="text-[#8b8b8b] hover:text-[#d4d4d4] p-0.5 rounded hover:bg-[#3e3e42] transition-colors"
         >

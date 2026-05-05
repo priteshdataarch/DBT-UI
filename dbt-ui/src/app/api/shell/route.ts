@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
-import { DBT_ROOT } from '@/lib/fileSystem';
-import { requireEditor } from '@/lib/apiAuth';
+import { DBT_ROOT } from '@/lib/files';
+import { requireEditor } from '@/lib/auth';
 
 type LineType = 'info' | 'success' | 'error' | 'warning';
 
@@ -29,6 +29,16 @@ export async function POST(req: NextRequest) {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  if (!gate.bypass && gate.role !== 'ADMIN' && /^\s*git\b/i.test(line)) {
+    return NextResponse.json(
+      {
+        error:
+          'Git commands in the terminal require admin role. Use Source Control (read-only for editors) or ask an admin to stage, commit, or push.',
+      },
+      { status: 403 }
+    );
   }
 
   const encoder = new TextEncoder();

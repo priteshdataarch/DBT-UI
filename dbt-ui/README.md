@@ -18,6 +18,7 @@ File explorer · Monaco editor · AI SQL assistant · Real-time command output �
    - [4c. Install Node dependencies](#4c-install-node-dependencies)
 5. [Configuration](#5-configuration)
    - [5a. Environment variables (.env.local)](#5a-environment-variables-envlocal)
+   - [First admin bootstrap](#first-admin-bootstrap)
    - [5b. dbt profiles.yml](#5b-dbt-profilesyml)
    - [5c. Athena settings in preview API](#5c-athena-settings-in-preview-api)
 6. [Running the App](#6-running-the-app)
@@ -105,13 +106,26 @@ your-dbt-project/               ← DBT_PROJECT_ROOT
     │   │       ├── chat/
     │   │       └── schema-refresh/
     │   ├── components/         ← React UI components
-    │   ├── lib/                ← Shared backend utilities
+    │   ├── lib/                ← Modular backend code (see below)
     │   └── types/              ← TypeScript interfaces
     ├── .env.local              ← Your secrets (never committed)
     ├── .env.local.example      ← Template to copy from
     ├── package.json
     └── README.md
 ```
+
+**`src/lib/` modules** (feature-oriented):
+
+| Folder | Responsibility |
+|--------|----------------|
+| `files/` | Project filesystem (`DBT_ROOT`, tree, read/write/delete/rename) |
+| `db/` | Prisma client |
+| `auth/` | Session gates (`requireEditor`, …), credentials, default team |
+| `dbt/` | dbt subprocess runner, manifest/catalog parsing, cache invalidation |
+| `scheduling/` | Cron due-date logic (`isScheduleDue`) |
+| `assistant/` | RAG, vector index, prompts, extra assistant instructions |
+
+Import from barrels when convenient, e.g. `import { prisma } from '@/lib/db'`, `import { loadManifest } from '@/lib/dbt'`, `import { retrieveContext } from '@/lib/assistant'`.
 
 <br>
 
@@ -272,22 +286,22 @@ AWS_DEFAULT_REGION=us-east-1
 
 > **Security:** `.env.local` is already listed in `.gitignore` — it is never committed.
 
+### First admin bootstrap
+
+When multi-user login is enabled (`DBT_UI_REQUIRE_LOGIN=true`), the **first** admin account is created at **`/login/admin`** only. That URL is **not** linked from the normal sign-in page (`/login`); use it once during deployment. The page checks `GET /api/register` and shows a closed state after any user exists. Logged-in users are redirected to the app if they open `/login/admin`.
+
 ---
 
 ### 5b. dbt profiles.yml
 
-The UI passes `--profiles-dir <dbt-ui>/` to every dbt command, so it reads credentials from `dbt-ui/profiles.yml`.
+Every dbt subprocess uses **`--project-dir` and `--profiles-dir` set to the same path**: the `DBT_PROJECT_ROOT` environment variable if set, otherwise the **parent of `dbt-ui/`** — see `DBT_ROOT` in `src/lib/fileSystem.ts`. **`profiles.yml` lives at that dbt project root**, not inside `dbt-ui/`.
 
-Create the file (or copy from your project root):
-
-```bash
-cp ../profiles.yml profiles.yml
-```
+Put **`profiles.yml` next to `dbt_project.yml`** at that root. You do **not** need a separate copy under `dbt-ui/`.
 
 The file should read credentials from environment variables — **never hard-code secrets**:
 
 ```yaml
-# dbt-ui/profiles.yml
+# profiles.yml (dbt project root, alongside dbt_project.yml)
 your_project_name:           # must match "profile:" in dbt_project.yml
   outputs:
     dev:

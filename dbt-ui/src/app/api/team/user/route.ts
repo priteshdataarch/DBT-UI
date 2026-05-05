@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
-import { prisma } from '@/lib/prisma';
-import { requireAdmin } from '@/lib/apiAuth';
+import { prisma } from '@/lib/db';
+import { requireAdmin } from '@/lib/auth';
 
 /** Admin creates a new user account and adds them to the current team. */
 export async function POST(req: NextRequest) {

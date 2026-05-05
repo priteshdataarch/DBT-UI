@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
-import { requireEditor, requireReader } from '@/lib/apiAuth';
+import { requireEditor, requireReader } from '@/lib/auth';
 
 const DBT_ROOT = process.env.DBT_PROJECT_ROOT
   ? path.resolve(process.env.DBT_PROJECT_ROOT)

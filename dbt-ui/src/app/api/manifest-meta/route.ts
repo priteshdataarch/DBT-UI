@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadManifest } from '@/lib/manifest';
+import { loadManifest } from '@/lib/dbt';
 
 export interface ColumnMeta {
   name: string;

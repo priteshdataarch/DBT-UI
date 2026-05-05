@@ -56,6 +56,7 @@ function FileSection({
   onUnstage,
   onDiscard,
   area,
+  writeDisabled,
 }: {
   title: string;
   files: GitFileEntry[];
@@ -64,6 +65,8 @@ function FileSection({
   onUnstage?: (f: GitFileEntry) => void;
   onDiscard?: (f: GitFileEntry) => void;
   area: 'staged' | 'unstaged' | 'untracked';
+  /** Hide stage/unstage/discard when user is not admin */
+  writeDisabled?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   if (files.length === 0) return null;
@@ -96,8 +99,8 @@ function FileSection({
                 </span>
               </span>
 
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                {area !== 'staged' && onStage && (
+              <div className={`flex items-center gap-1 shrink-0 ${writeDisabled ? 'hidden' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}>
+                {!writeDisabled && area !== 'staged' && onStage && (
                   <button
                     onClick={() => onStage(f)}
                     title="Stage file"
@@ -106,7 +109,7 @@ function FileSection({
                     <Plus size={10} />
                   </button>
                 )}
-                {area === 'staged' && onUnstage && (
+                {!writeDisabled && area === 'staged' && onUnstage && (
                   <button
                     onClick={() => onUnstage(f)}
                     title="Unstage file"
@@ -115,7 +118,7 @@ function FileSection({
                     <Minus size={10} />
                   </button>
                 )}
-                {area !== 'staged' && onDiscard && (
+                {!writeDisabled && area !== 'staged' && onDiscard && (
                   <button
                     onClick={() => onDiscard(f)}
                     title="Discard changes"
@@ -160,6 +163,7 @@ function BranchRow({
   onDelete,
   onDeleteForce,
   onMerge,
+  writeDisabled,
 }: {
   branch: GitBranchType;
   currentBranch: string;
@@ -168,6 +172,7 @@ function BranchRow({
   onDelete: () => void;
   onDeleteForce: () => void;
   onMerge: () => void;
+  writeDisabled?: boolean;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const isCurrent = branch.name === currentBranch;
@@ -185,7 +190,7 @@ function BranchRow({
         <span className="text-[9px] text-[#5a5a5a] truncate max-w-[60px]">{branch.upstream}</span>
       )}
 
-      {/* Action menu */}
+      {!writeDisabled && (
       <div className="relative shrink-0">
         <button
           onClick={() => setShowMenu((v) => !v)}
@@ -238,6 +243,7 @@ function BranchRow({
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -332,6 +338,9 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
     ? status.staged.length + status.unstaged.length + status.untracked.length
     : 0;
 
+  /** Stage/commit/push/pull/fetch/branch writes — API sets false for EDITOR/VIEWER when login enforced. */
+  const canWriteGit = Boolean(status?.isRepo && (status.gitWriteAllowed ?? true));
+
   const canCommit = (status?.staged.length ?? 0) > 0 && commitMsg.trim().length > 0;
   const canPush   = (status?.ahead ?? 0) > 0;
   const canPull   = (status?.behind ?? 0) > 0;
@@ -382,6 +391,13 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
       {status?.isRepo && (
         <div className="flex flex-col flex-1 overflow-hidden min-h-0">
 
+          {!canWriteGit && (
+            <div className="mx-3 mt-2 px-2.5 py-2 rounded border border-[#f59e0b]/35 bg-[#f59e0b]/10 text-[11px] text-[#e9d493] leading-snug shrink-0">
+              Staging, commit, push, pull, fetch, and branch actions are restricted to{' '}
+              <span className="font-semibold text-[#fcd34d]">team admins</span>. You can still view status and diffs here.
+            </div>
+          )}
+
           {/* ── Branch bar ── */}
           <div className="px-3 py-2 border-b border-[#3e3e42] shrink-0">
             <div className="flex items-center gap-2">
@@ -410,7 +426,7 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
             <div className="flex gap-1 mt-2">
               <button
                 onClick={() => act('fetch')}
-                disabled={!!actionLoading}
+                disabled={!canWriteGit || !!actionLoading}
                 title="Fetch all remotes"
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-[#4a4a4a] text-[#8b8b8b] hover:text-[#d4d4d4] hover:border-[#5a5a5a] transition-colors disabled:opacity-40"
               >
@@ -419,7 +435,7 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
               </button>
               <button
                 onClick={() => act('pull')}
-                disabled={!!actionLoading}
+                disabled={!canWriteGit || !!actionLoading}
                 title={canPull ? `Pull ${status.behind} commit${status.behind !== 1 ? 's' : ''} from remote` : 'Pull from remote'}
                 className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded border transition-colors disabled:opacity-40 ${
                   canPull
@@ -432,7 +448,7 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
               </button>
               <button
                 onClick={() => act('push')}
-                disabled={!canPush || !!actionLoading}
+                disabled={!canPush || !canWriteGit || !!actionLoading}
                 title={canPush ? `Push ${status.ahead} commit${status.ahead !== 1 ? 's' : ''}` : 'Nothing to push'}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-[#89d185]/40 text-[#89d185] hover:bg-[#89d185]/10 transition-colors disabled:opacity-40"
               >
@@ -473,18 +489,19 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
                   onChange={(e) => setCommitMsg(e.target.value)}
                   placeholder="Commit message (Ctrl+Enter)"
                   rows={2}
+                  disabled={!canWriteGit}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && canCommit) {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && canCommit && canWriteGit) {
                       e.preventDefault();
                       act('commit', { message: commitMsg });
                     }
                   }}
-                  className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-2.5 py-2 text-xs text-[#d4d4d4] placeholder-[#5a5a5a] outline-none resize-none transition-colors"
+                  className="w-full bg-[#3c3c3c] border border-[#5a5a5a] focus:border-[#007acc] rounded px-2.5 py-2 text-xs text-[#d4d4d4] placeholder-[#5a5a5a] outline-none resize-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
 
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
-                    disabled={!canCommit || !!actionLoading}
+                    disabled={!canCommit || !canWriteGit || !!actionLoading}
                     onClick={() => act('commit', { message: commitMsg })}
                     className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] rounded font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-[#0e639c]/20 border border-[#0e639c]/40 text-[#4fc3f7] hover:bg-[#0e639c]/40"
                   >
@@ -492,7 +509,7 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
                     Commit
                   </button>
                   <button
-                    disabled={!canCommit || !!actionLoading}
+                    disabled={!canCommit || !canWriteGit || !!actionLoading}
                     onClick={() => act('commit-push', { message: commitMsg })}
                     className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] rounded font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-[#007acc]/10 border border-[#007acc]/30 text-[#007acc] hover:bg-[#007acc]/20"
                   >
@@ -507,7 +524,7 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
                 <div className="flex gap-1.5 px-3 py-2 border-b border-[#3e3e42] shrink-0">
                   <button
                     onClick={() => act('stage-all')}
-                    disabled={!!actionLoading}
+                    disabled={!canWriteGit || !!actionLoading}
                     className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-[#89d185]/30 text-[#89d185] hover:bg-[#89d185]/10 transition-colors disabled:opacity-40"
                   >
                     {actionLoading === 'stage-all' ? <Loader2 size={9} className="animate-spin" /> : <Plus size={9} />}
@@ -515,7 +532,7 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
                   </button>
                   <button
                     onClick={() => act('unstage-all')}
-                    disabled={!!actionLoading || status.staged.length === 0}
+                    disabled={!canWriteGit || !!actionLoading || status.staged.length === 0}
                     className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-[#e2c08d]/30 text-[#e2c08d] hover:bg-[#e2c08d]/10 transition-colors disabled:opacity-40"
                   >
                     {actionLoading === 'unstage-all' ? <Loader2 size={9} className="animate-spin" /> : <Minus size={9} />}
@@ -532,9 +549,29 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
                     <p className="text-xs">Working tree clean</p>
                   </div>
                 )}
-                <FileSection title="Staged Changes" files={status.staged} area="staged" onUnstage={unstageFile} />
-                <FileSection title="Changes" files={status.unstaged} area="unstaged" onStage={stageFile} onDiscard={discardFile} />
-                <FileSection title="Untracked" files={status.untracked} defaultOpen={false} area="untracked" onStage={stageFile} />
+                <FileSection
+                  title="Staged Changes"
+                  files={status.staged}
+                  area="staged"
+                  onUnstage={unstageFile}
+                  writeDisabled={!canWriteGit}
+                />
+                <FileSection
+                  title="Changes"
+                  files={status.unstaged}
+                  area="unstaged"
+                  onStage={stageFile}
+                  onDiscard={discardFile}
+                  writeDisabled={!canWriteGit}
+                />
+                <FileSection
+                  title="Untracked"
+                  files={status.untracked}
+                  defaultOpen={false}
+                  area="untracked"
+                  onStage={stageFile}
+                  writeDisabled={!canWriteGit}
+                />
               </div>
             </div>
           )}
@@ -552,17 +589,18 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
                       value={newBranchName}
                       onChange={(e) => setNewBranchName(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newBranchName.trim()) {
+                        if (e.key === 'Enter' && newBranchName.trim() && canWriteGit) {
                           act('create-branch', { branch: newBranchName.trim() });
                         }
                         if (e.key === 'Escape') { setShowNewBranch(false); setNewBranchName(''); }
                       }}
                       placeholder="New branch name…"
-                      className="flex-1 bg-[#3c3c3c] border border-[#007acc]/50 focus:border-[#007acc] rounded px-2 py-1 text-xs text-[#d4d4d4] placeholder-[#5a5a5a] outline-none"
+                      disabled={!canWriteGit}
+                      className="flex-1 bg-[#3c3c3c] border border-[#007acc]/50 focus:border-[#007acc] rounded px-2 py-1 text-xs text-[#d4d4d4] placeholder-[#5a5a5a] outline-none disabled:opacity-50"
                     />
                     <button
                       onClick={() => newBranchName.trim() && act('create-branch', { branch: newBranchName.trim() })}
-                      disabled={!newBranchName.trim() || !!actionLoading}
+                      disabled={!canWriteGit || !newBranchName.trim() || !!actionLoading}
                       className="px-2 py-1 text-[10px] rounded bg-[#007acc]/20 border border-[#007acc]/40 text-[#007acc] hover:bg-[#007acc]/30 disabled:opacity-40"
                     >
                       {actionLoading === 'create-branch' ? <Loader2 size={9} className="animate-spin" /> : 'Create'}
@@ -577,7 +615,8 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
                 ) : (
                   <button
                     onClick={() => setShowNewBranch(true)}
-                    className="flex items-center gap-1.5 w-full px-2 py-1.5 text-[11px] rounded border border-[#3e3e42] text-[#8b8b8b] hover:border-[#007acc]/40 hover:text-[#007acc] transition-colors"
+                    disabled={!canWriteGit}
+                    className="flex items-center gap-1.5 w-full px-2 py-1.5 text-[11px] rounded border border-[#3e3e42] text-[#8b8b8b] hover:border-[#007acc]/40 hover:text-[#007acc] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus size={11} />
                     New branch
@@ -596,6 +635,7 @@ export default function GitPanel({ onClose, onRefreshTree }: Props) {
                     branch={b}
                     currentBranch={status.branch}
                     actionLoading={actionLoading}
+                    writeDisabled={!canWriteGit}
                     onSwitch={() => act('switch-branch', { branch: b.name })}
                     onDelete={() => act('delete-branch', { branch: b.name })}
                     onDeleteForce={() => act('delete-branch-force', { branch: b.name })}

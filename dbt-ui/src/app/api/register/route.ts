@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { Prisma } from '@prisma/client';
-import { prisma } from '@/lib/prisma';
-import { getOrCreateDefaultTeamId } from '@/lib/teamScope';
+import { prisma } from '@/lib/db';
+import { getOrCreateDefaultTeamId } from '@/lib/auth';
 
 function registrationErrorMessage(e: unknown): string {
   if (e instanceof Prisma.PrismaClientKnownRequestError) {
@@ -23,6 +23,16 @@ function registrationErrorMessage(e: unknown): string {
     return `Registration failed: ${msg}`;
   }
   return 'Registration failed — check the server terminal for details.';
+}
+
+/** Whether first-admin bootstrap is still allowed (no auth). */
+export async function GET() {
+  try {
+    const count = await prisma.user.count();
+    return NextResponse.json({ bootstrapOpen: count === 0 });
+  } catch {
+    return NextResponse.json({ bootstrapOpen: false, error: 'database_unavailable' }, { status: 503 });
+  }
 }
 
 /** Bootstrap the first admin user (no session required). Disabled once any user exists. */

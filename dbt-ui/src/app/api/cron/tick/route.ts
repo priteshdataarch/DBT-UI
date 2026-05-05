@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { isScheduleDue } from '@/lib/scheduleDue';
-import { runDbtSync } from '@/lib/dbtRunner';
-import { invalidateCache } from '@/lib/manifest';
+import { prisma } from '@/lib/db';
+import { isScheduleDue } from '@/lib/scheduling';
+import { runDbtSync, invalidateCache } from '@/lib/dbt';
 
 function verifyCronSecret(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET?.trim();

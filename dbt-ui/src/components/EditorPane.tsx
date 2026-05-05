@@ -18,6 +18,9 @@ interface Props {
   onSave: (path: string) => void;
   onPreview?: (filePath: string) => void;
   onCompile?: (filePath: string) => Promise<{ sql: string; compiledPath: string }>;
+  /** While read-only due to another editor’s lock — retry acquire + reload from disk. */
+  onRetryAcquireLock?: () => void | Promise<void>;
+  lockRetryLoading?: boolean;
 }
 
 type ViewMode = 'edit' | 'compiled' | 'info';
@@ -203,8 +206,11 @@ export default function EditorPane({
   onSave,
   onPreview,
   onCompile,
+  onRetryAcquireLock,
+  lockRetryLoading,
 }: Props) {
   const activeFileTab = tabs.find((t) => t.path === activeTab);
+  const lockBlockedBy = activeFileTab?.lockBlockedBy ?? null;
 
   // Manifest meta for completions
   const manifestMeta = useRef<ManifestMetaResponse | null>(null);
@@ -400,10 +406,11 @@ export default function EditorPane({
     (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        if (activeTab) onSave(activeTab);
+        const tab = tabs.find((t) => t.path === activeTab);
+        if (activeTab && !tab?.lockBlockedBy) onSave(activeTab);
       }
     },
-    [activeTab, onSave]
+    [activeTab, onSave, tabs]
   );
 
   useEffect(() => {
@@ -433,11 +440,11 @@ export default function EditorPane({
 
       {/* ── Tab bar ──────────────────────────────────────── */}
       <div className="flex bg-[#252526] border-b border-[#3e3e42] overflow-x-auto shrink-0 select-none">
-        {tabs.map((tab) => {
+        {tabs.map((tab, tabIndex) => {
           const isActive = tab.path === activeTab;
           return (
             <div
-              key={tab.path}
+              key={`${tab.path}\u0001${tabIndex}`}
               onClick={() => onTabClick(tab.path)}
               title={tab.path}
               className={`flex items-center gap-1.5 px-3 py-2 cursor-pointer border-r border-[#3e3e42] shrink-0 group transition-colors ${
@@ -545,7 +552,7 @@ export default function EditorPane({
 
             <button
               onClick={() => onSave(activeTab!)}
-              disabled={!activeFileTab.isDirty}
+              disabled={!activeFileTab.isDirty || !!lockBlockedBy}
               className="flex items-center gap-1 text-xs text-[#8b8b8b] hover:text-[#d4d4d4] disabled:opacity-30 disabled:cursor-not-allowed px-2 py-0.5 rounded hover:bg-[#3e3e42] transition-colors"
               title="Save (⌘S)"
             >
@@ -553,6 +560,28 @@ export default function EditorPane({
               {activeFileTab.isDirty ? 'Save' : 'Saved'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Lock / conflict banner ───────────────────────── */}
+      {lockBlockedBy && (
+        <div className="flex items-start gap-3 px-3 py-2 bg-[#c58628]/15 border-b border-[#c58628]/35 text-[#e9d493] text-xs shrink-0">
+          <AlertCircle size={12} className="mt-0.5 shrink-0" />
+          <span className="leading-snug flex-1 min-w-0">
+            Read-only — {lockBlockedBy.includes('@') ? `another editor holds this file (${lockBlockedBy}).` : lockBlockedBy}{' '}
+            <span className="text-[#a89868]">Checking again automatically.</span>
+          </span>
+          {onRetryAcquireLock && (
+            <button
+              type="button"
+              disabled={lockRetryLoading}
+              onClick={() => void onRetryAcquireLock()}
+              className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded border border-[#c58628]/40 bg-[#252526] text-[#f0e6c8] hover:bg-[#3e3e42] disabled:opacity-50 text-[11px] font-medium"
+            >
+              {lockRetryLoading ? <Loader2 size={11} className="animate-spin" /> : null}
+              Check again
+            </button>
+          )}
         </div>
       )}
 
@@ -646,6 +675,7 @@ export default function EditorPane({
                 padding: { top: 12 },
                 bracketPairColorization: { enabled: true },
                 guides: { bracketPairs: true },
+                readOnly: !!lockBlockedBy,
               }}
             />
           )}

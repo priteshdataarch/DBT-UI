@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { getOrCreateDefaultTeamId } from '@/lib/teamScope';
-import { requireEditor, requireReader } from '@/lib/apiAuth';
-import type { SessionContext } from '@/lib/apiAuth';
+import { prisma } from '@/lib/db';
+import {
+  getOrCreateDefaultTeamId,
+  requireEditor,
+  requireReader,
+  type SessionContext,
+} from '@/lib/auth';
 
 async function resolveTeamId(ctx: SessionContext): Promise<string> {
   if (ctx.bypass) {

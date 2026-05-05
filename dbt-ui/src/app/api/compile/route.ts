@@ -3,7 +3,7 @@ import { execSync, execFile } from 'child_process';
 import { accessSync, constants } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
-import { DBT_ROOT } from '@/lib/fileSystem';
+import { DBT_ROOT } from '@/lib/files';
 
 // ─── Resolve dbt binary (same logic as dbt/route.ts) ─────────────────────────
 function resolveDbtBin(): string {
@@ -33,7 +33,7 @@ function modelNameFromPath(filePath: string): string {
 
 /** Recursively find first file matching name under dir */
 async function findFile(dir: string, name: string): Promise<string | null> {
-  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  let entries;
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
   } catch {
