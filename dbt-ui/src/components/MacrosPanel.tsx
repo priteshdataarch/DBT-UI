@@ -284,7 +284,10 @@ export default function MacrosPanel({ onClose, onOpenFile }: Props) {
   }, [data, filter]);
 
   const totalProject  = filtered?.project.length ?? 0;
-  const totalPackages = Object.values(filtered?.packages ?? {}).reduce((s, v) => s + v.length, 0);
+  const totalPackages = (Object.values(filtered?.packages ?? {}) as MacroDef[][]).reduce(
+    (s, v) => s + v.length,
+    0
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#1e1e1e] font-mono">
@@ -393,7 +396,7 @@ export default function MacrosPanel({ onClose, onOpenFile }: Props) {
                     key={pkg}
                     title={pkg}
                     icon={<Package size={10} />}
-                    macros={macros}
+                    macros={macros as MacroDef[]}
                     defaultOpen={false}
                   />
                 ))}

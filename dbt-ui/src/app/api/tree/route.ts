@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getFileTree } from '@/lib/fileSystem';
+import { getFileTree } from '@/lib/files';
 import type { FileNode } from '@/types';
 
 export async function GET() {

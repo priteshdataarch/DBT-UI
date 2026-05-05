@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
-import { DBT_ROOT } from '@/lib/fileSystem';
+import { DBT_ROOT } from '@/lib/files';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

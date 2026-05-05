@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFile, writeFile, createFile, listDir, deleteFile, renameFile } from '@/lib/fileSystem';
-import { requireEditor, requireReader } from '@/lib/apiAuth';
+import { readFile, writeFile, createFile, listDir, deleteFile, renameFile } from '@/lib/files';
+import { requireEditor, requireReader } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   const gate = await requireReader();

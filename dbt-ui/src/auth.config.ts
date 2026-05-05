@@ -14,7 +14,7 @@ export default {
         password: { label: 'Password', type: 'password' },
       },
       authorize: async (credentials) => {
-        const { authorizeCredentials } = await import('@/lib/authCredentials');
+        const { authorizeCredentials } = await import('@/lib/auth/authCredentials');
         return authorizeCredentials(
           credentials?.email as string | undefined,
           credentials?.password as string | undefined

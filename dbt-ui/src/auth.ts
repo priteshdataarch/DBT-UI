@@ -20,9 +20,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user && token.sub) {
-        session.user.id = token.id ?? token.sub;
-        session.user.role = token.role ?? 'VIEWER';
-        session.user.teamId = token.teamId ?? '';
+        session.user.id = String(token.id ?? token.sub);
+        const r = token.role;
+        session.user.role =
+          r === 'ADMIN' || r === 'EDITOR' || r === 'VIEWER' ? r : 'VIEWER';
+        session.user.teamId = String(token.teamId ?? '');
       }
       return session;
     },

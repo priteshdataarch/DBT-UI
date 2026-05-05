@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { retrieveContext } from '@/lib/rag';
-import { loadUserSystemAppend } from '@/lib/assistantUserInstructions';
-import { loadSchema, INTERMEDIATE_MODELS } from '@/lib/catalog';
-import { buildSqlPrompt, buildAuthoringPrompt } from '@/lib/prompts';
+import {
+  retrieveContext,
+  loadUserSystemAppend,
+  buildSqlPrompt,
+  buildAuthoringPrompt,
+} from '@/lib/assistant';
+import { loadSchema, INTERMEDIATE_MODELS } from '@/lib/dbt';
 
 // ── SQL mode system prompt — loaded from prompts/rag-sql-system.txt ──────────
 

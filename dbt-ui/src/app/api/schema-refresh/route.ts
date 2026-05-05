@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { buildAllSchemaChunks } from '@/lib/catalog';
-import { buildIndex, getIndexStatus } from '@/lib/vectorStore';
-import { invalidateCatalogCache } from '@/lib/catalog';
+import { buildAllSchemaChunks, invalidateCatalogCache } from '@/lib/dbt';
+import { buildIndex, getIndexStatus } from '@/lib/assistant';
 
 // GET — return current index status
 export async function GET() {

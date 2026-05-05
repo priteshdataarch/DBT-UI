@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { Prisma } from '@prisma/client';
-import { prisma } from '@/lib/prisma';
-import { getOrCreateDefaultTeamId } from '@/lib/teamScope';
+import { prisma } from '@/lib/db';
+import { getOrCreateDefaultTeamId } from '@/lib/auth';
 
 function registrationErrorMessage(e: unknown): string {
   if (e instanceof Prisma.PrismaClientKnownRequestError) {

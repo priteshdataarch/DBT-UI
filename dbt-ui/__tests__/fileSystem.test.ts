@@ -106,7 +106,7 @@ describe('deleteFile and renameFile', () => {
 
   async function loadFs() {
     jest.resetModules();
-    return import('@/lib/fileSystem');
+    return import('@/lib/files');
   }
 
   it('deleteFile removes an allowed file', async () => {
